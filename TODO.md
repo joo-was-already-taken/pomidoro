@@ -6,3 +6,4 @@
 - [x] create `Config` struct, in which every value is initialized as opposed to `TomlConfig`
 - [ ] handle invalid time formats
 - [x] remove server socket if already exists
+- [ ] add timeout for server response

@@ -1,0 +1,14 @@
+[package]
+name = "pomidoro"
+version = "0.1.0"
+edition = "2021"
+readme = "README.md"
+
+[dependencies]
+bincode = "1.3.3"
+chrono = "0.4.38"
+clap = { version = "4.5.20", features = ["derive"] }
+mustache = "0.9.0"
+rand = "0.8.5"
+serde = { version = "1.0.214", features = ["derive"] }
+toml = "0.8.19"

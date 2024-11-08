@@ -1,39 +1,28 @@
 {
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs";
-    crate2nix = {
-      url = "github:kolloch/crate2nix";
-      flake = false;
-    };
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+    crane = {
+      url = "github:ipetkov/crane";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs, crate2nix, flake-utils }:
+  outputs = { nixpkgs, crane, flake-utils, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        pkgs = nixpkgs.legacyPackages.${system};
-        crateName = "pomidoro";
-
-        inherit (import "${crate2nix}/tools.nix" { inherit pkgs; })
-          generatedCargoNix;
-
-        project = pkgs.callPackage (generatedCargoNix {
-          name = crateName;
+        pkgs = import nixpkgs { inherit system; };
+      in {
+        packages.default = crane.lib.${system}.buildPackage {
           src = ./.;
-        }) {
-          defaultCrateOverrides = pkgs.defaultCrateOverrides // {
-            # Crate dependency overrides go here
-          };
         };
 
-      in {
-        packages.${crateName} = project.rootCrate.build;
-
-        defaultPackage = self.packages.${system}.${crateName};
-
         devShell = pkgs.mkShell {
-          inputsFrom = builtins.attrValues self.packages.${system};
-          buildInputs = [ pkgs.cargo pkgs.rust-analyzer pkgs.clippy ];
+          buildInputs = with pkgs; [
+            cargo
+            rust-analyzer
+            clippy
+          ];
         };
       });
 }

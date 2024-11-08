@@ -12,8 +12,11 @@ const MAX_UDP_PACKET_SIZE: usize = 65_535;
 pub enum ServerAction<T: Serialize> {
     Respond(T),
     #[allow(unused)]
-    None,
+    StopRespond(T),
+    #[allow(unused)]
     Stop,
+    #[allow(unused)]
+    None,
 }
 
 pub trait ServerState {
@@ -31,10 +34,15 @@ pub fn start_server<S: ServerState>(path: &Path, mut state: S) -> std::io::Resul
         let received_data = &buffer[..size];
         let request = bincode::deserialize(received_data).unwrap(); // TODO
 
-        match state.update(&request) {
-            ServerAction::Respond(response) => {
+        let action = state.update(&request);
+        match action {
+            ServerAction::Respond(ref response) | ServerAction::StopRespond(ref response) => {
                 let response_data = bincode::serialize(&response).unwrap();
                 socket.send_to_addr(&response_data, &sock_addr)?;
+
+                if matches!(action, ServerAction::StopRespond(_)) {
+                    break Ok(());
+                }
             },
             ServerAction::Stop => break Ok(()),
             ServerAction::None => (),

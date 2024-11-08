@@ -243,7 +243,7 @@ impl ServerState for PomodoroClock<'_> {
                 let state = self.state_at(now).expect(sys_clock_err_msg);
                 ServerAction::Respond(Response::State(state))
             },
-            Request::Stop => ServerAction::Stop,
+            Request::Stop => ServerAction::StopRespond(Response::Confirmation(Ok(()))),
         }
     }
 }

@@ -14,5 +14,4 @@ jobs:
       - uses: cachix/install-nix-action@v31
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
-      - run: nix build
-      - run: nix flake check
+      - run: nix develop --command cargo test

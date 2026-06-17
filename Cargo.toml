@@ -1,0 +1,26 @@
+[package]
+name = "pomidoro"
+version = "0.0.1"
+edition = "2024"
+
+[dependencies]
+clap = { version = "4.6.1", features = ["derive"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+log = "0.4.32"
+env_logger = "0.11.10"
+rustix = { version = "1.1.4", features = ["process"] }
+tokio = { version = "1.52.3", features = ["full"] }
+toml = "1.1.2"
+thiserror = "2.0.18"
+humantime-serde = "1.1.1"
+shellexpand = "3.1.2"
+dirs = "6.0.0"
+
+[lints.clippy]
+correctness = "warn"
+all = "warn"
+pedantic = "warn"
+nursery = "warn"
+missing_errors_doc = { level = "allow", priority = 1 }
+missing_panics_doc = { level = "allow", priority = 1 }

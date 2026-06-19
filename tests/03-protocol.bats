@@ -15,7 +15,7 @@ teardown() {
 
 	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" status
 	(( status == 0 ))
-	[[ "$output" == *"Stopped"* ]] || [[ "$output" == *"state"* ]]
+	[[ "$output" == *"stopped"* ]] || [[ "$output" == *"state"* ]]
 }
 
 @test "multiple clients can command same server sequentially" {
@@ -26,14 +26,14 @@ teardown() {
 
 	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" status
 	(( status == 0 ))
-	[[ "$output" == *"Running"* ]]
+	[[ "$output" == *"running"* ]]
 
 	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" pause
 	(( status == 0 ))
 
 	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" status
 	(( status == 0 ))
-	[[ "$output" == *"Paused"* ]]
+	[[ "$output" == *"paused"* ]]
 }
 
 @test "command aliases" {
@@ -46,13 +46,13 @@ teardown() {
 
 	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" p
 	(( status == 0 ))
-	[[ "$output" == *"success"* ]]
+	[[ "$output" == "" ]]
 }
 
 @test "responses contain JSON-like structure" {
 	start_server
 
-	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" status
+	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" status --json
 	(( status == 0 ))
 
 	echo "$output" | jq . >/dev/null
@@ -63,7 +63,7 @@ teardown() {
 
 	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" n
 	(( status == 0 ))
-	[[ "$output" == *"success"* ]]
+	[[ "$output" == "" ]]
 }
 
 @test "server responds to status and all command types" {
@@ -85,7 +85,7 @@ teardown() {
 @test "confirmation responses include required JSON fields" {
 	start_server
 
-	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" start
+	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" start --json
 	(( status == 0 ))
 
 	[[ "$(echo "$output" | jq -r '.request')" == "Start" ]]
@@ -98,7 +98,7 @@ teardown() {
 
 	"${POMIDORO_BIN}" --config "${CONFIG_FILE}" start >/dev/null
 
-	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" status
+	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" status --json
 	(( status == 0 ))
 
 	echo "$output" | jq -e 'has("interval_type")' >/dev/null

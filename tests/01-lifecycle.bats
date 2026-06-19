@@ -15,7 +15,7 @@ teardown() {
 
 	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" start
 	(( status == 0 ))
-	[[ "$output" == *"success"* ]]
+	[[ "$output" == "" ]]
 }
 
 @test "status shows running state after start" {
@@ -26,7 +26,7 @@ teardown() {
 
 	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" status
 	(( status == 0 ))
-	[[ "$output" == *"Running"* ]]
+	[[ "$output" == *"running"* ]]
 }
 
 @test "pause stops running timer" {
@@ -37,7 +37,7 @@ teardown() {
 
 	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" pause
 	(( status == 0 ))
-	[[ "$output" == *"success"* ]]
+	[[ "$output" == "" ]]
 }
 
 @test "status shows paused state after pause" {
@@ -50,7 +50,7 @@ teardown() {
 
 	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" status
 	(( status == 0 ))
-	[[ "$output" == *"Paused"* ]]
+	[[ "$output" == *"paused"* ]]
 }
 
 @test "resume restarts paused timer" {
@@ -63,7 +63,7 @@ teardown() {
 
 	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" resume
 	(( status == 0 ))
-	[[ "$output" == *"success"* ]]
+	[[ "$output" == "" ]]
 }
 
 @test "toggle alternates between pause and resume" {
@@ -74,11 +74,11 @@ teardown() {
 
 	"${POMIDORO_BIN}" --config "${CONFIG_FILE}" toggle >/dev/null
 	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" status
-	[[ "$output" == *"Paused"* ]]
+	[[ "$output" == *"paused"* ]]
 
 	"${POMIDORO_BIN}" --config "${CONFIG_FILE}" toggle >/dev/null
 	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" status
-	[[ "$output" == *"Running"* ]]
+	[[ "$output" == *"running"* ]]
 }
 
 @test "stop command resets timer" {
@@ -89,7 +89,7 @@ teardown() {
 
 	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" stop
 	(( status == 0 ))
-	[[ "$output" == *"success"* ]]
+	[[ "$output" == "" ]]
 }
 
 @test "status shows stopped state after stop" {
@@ -102,7 +102,7 @@ teardown() {
 
 	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" status
 	(( status == 0 ))
-	[[ "$output" == *"Stopped"* ]]
+	[[ "$output" == *"stopped"* ]]
 }
 
 @test "server initializes with stopped timer" {
@@ -110,5 +110,5 @@ teardown() {
 
 	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" status
 	(( status == 0 ))
-	[[ "$output" == *"Stopped"* ]]
+	[[ "$output" == *"stopped"* ]]
 }

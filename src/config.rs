@@ -198,10 +198,7 @@ mod tests {
         let config = Config::parse("").unwrap();
         assert_eq!(config.cycle.len(), 8);
         assert_eq!(config.intervals.len(), 3);
-        assert_eq!(
-            config.intervals["work"].duration,
-            Duration::from_mins(25),
-        );
+        assert_eq!(config.intervals["work"].duration, Duration::from_mins(25));
     }
 
     #[test]
@@ -212,10 +209,7 @@ mod tests {
         "#;
         let config = Config::parse(toml_str).unwrap();
 
-        assert_eq!(
-            config.intervals["work"].duration,
-            Duration::from_mins(50),
-        );
+        assert_eq!(config.intervals["work"].duration, Duration::from_mins(50));
         assert_eq!(
             config.intervals["short break"].duration,
             Duration::from_mins(5),

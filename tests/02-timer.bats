@@ -15,7 +15,7 @@ teardown() {
 
 	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" next
 	(( status == 0 ))
-	[[ "$output" == *"success"* ]]
+	[[ "$output" == "" ]]
 }
 
 @test "correct next interval" {
@@ -35,12 +35,12 @@ teardown() {
 	"${POMIDORO_BIN}" --config "${CONFIG_FILE}" start >/dev/null
 	sleep 0.1
 
-	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" status
+	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" status --json
 	TIME_LEFT_1=$(echo "$output" | jq '.time_left')
 
 	sleep 1
 
-	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" status
+	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" status --json
 	TIME_LEFT_2=$(echo "$output" | jq '.time_left')
 
 	(( TIME_LEFT_2 <= TIME_LEFT_1 ))
@@ -53,12 +53,12 @@ teardown() {
 	sleep 0.1
 	"${POMIDORO_BIN}" --config "${CONFIG_FILE}" pause >/dev/null
 
-	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" status
+	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" status --json
 	TIME_LEFT_1=$(echo "$output" | jq '.time_left')
 
 	sleep 1
 
-	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" status
+	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" status --json
 	TIME_LEFT_2=$(echo "$output" | jq '.time_left')
 
 	(( TIME_LEFT_2 == TIME_LEFT_1 ))
@@ -131,28 +131,28 @@ teardown() {
 	"${POMIDORO_BIN}" --config "${CONFIG_FILE}" pause >/dev/null
 
 	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" status
-	[[ "$output" == *"Paused"* ]]
+	[[ "$output" == *"paused"* ]]
 
 	"${POMIDORO_BIN}" --config "${CONFIG_FILE}" next >/dev/null
 	sleep 0.1
 
 	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" status
 	[[ "$output" == *"break"* ]]
-	[[ "$output" == *"Running"* ]]
+	[[ "$output" == *"running"* ]]
 }
 
 @test "next interval from stopped state starts running next interval" {
 	start_server
 
 	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" status
-	[[ "$output" == *"Stopped"* ]]
+	[[ "$output" == *"stopped"* ]]
 
 	"${POMIDORO_BIN}" --config "${CONFIG_FILE}" next >/dev/null
 	sleep 0.1
 
 	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" status
 	[[ "$output" == *"break"* ]]
-	[[ "$output" == *"Running"* ]]
+	[[ "$output" == *"running"* ]]
 }
 
 @test "next interval from overtime state starts running next interval" {
@@ -187,14 +187,14 @@ teardown() {
 	"${POMIDORO_BIN}" --config "${OVERTIME_CONFIG}" start >/dev/null
 	sleep 1.2
 
-	run "${POMIDORO_BIN}" --config "${OVERTIME_CONFIG}" status
+	run "${POMIDORO_BIN}" --config "${OVERTIME_CONFIG}" status --json
 	[[ "$output" == *"\"is_overtime\":true"* ]]
 
 	"${POMIDORO_BIN}" --config "${OVERTIME_CONFIG}" next >/dev/null
 	sleep 0.1
 
-	run "${POMIDORO_BIN}" --config "${OVERTIME_CONFIG}" status
+	run "${POMIDORO_BIN}" --config "${OVERTIME_CONFIG}" status --json
 	[[ "$output" == *"break"* ]]
-	[[ "$output" == *"Running"* ]]
+	[[ "$output" == *"\"state\":\"Running\""* ]]
 	[[ "$output" == *"\"is_overtime\":false"* ]]
 }

@@ -1,6 +1,6 @@
 use pomidoro::{Request, config};
 
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 use thiserror::Error;
 use tokio::io::AsyncBufReadExt;
 use tokio::net::{UnixListener, UnixStream};
@@ -37,7 +37,7 @@ struct Cli {
 }
 
 #[derive(Subcommand, Debug)]
-pub enum Command {
+enum Command {
     /// Start the server
     StartServer {
         /// Move the server to the background (Daemonize)
@@ -47,49 +47,153 @@ pub enum Command {
 
     /// Start the timer
     #[command(name = "start", visible_alias = "s")]
-    StartTimer,
+    StartTimer(SimpleCommandArgs),
 
     /// Skip to the next interval in the cycle
     #[command(visible_alias = "next", visible_alias = "n")]
-    NextInterval,
+    NextInterval(SimpleCommandArgs),
 
     /// Pause a running timer
     #[command(visible_alias = "p")]
-    Pause,
+    Pause(SimpleCommandArgs),
 
     /// Resume a paused timer
     #[command(visible_alias = "r")]
-    Resume,
+    Resume(SimpleCommandArgs),
 
     /// Toggle between pause and resume
     #[command(visible_alias = "t")]
-    Toggle,
+    Toggle(SimpleCommandArgs),
 
     /// Stop the timer and reset the cycle
-    Stop,
+    Stop(SimpleCommandArgs),
 
     /// Get the current status of the timer
-    Status,
+    Status(StatusCommandArgs),
 
     /// Listen to status updates
-    Listen,
+    Listen(StatusCommandArgs),
 }
 
 impl Command {
     #[must_use]
-    pub const fn as_request(&self) -> Option<Request> {
-        let request = match self {
-            Self::StartTimer => Request::Start,
-            Self::NextInterval => Request::NextInterval,
-            Self::Pause => Request::Pause,
-            Self::Resume => Request::Resume,
-            Self::Toggle => Request::Toggle,
-            Self::Stop => Request::Stop,
-            Self::Status => Request::Status,
-            Self::Listen => Request::Listen,
+    pub fn into_request_and_format(self) -> Option<(Request, OutputFormat)> {
+        let (request, format) = match self {
+            Self::StartTimer(args) => (Request::Start, OutputFormat::from_simple(&args)),
+            Self::NextInterval(args) => {
+                (Request::NextInterval, OutputFormat::from_simple(&args))
+            },
+            Self::Pause(args) => (Request::Pause, OutputFormat::from_simple(&args)),
+            Self::Resume(args) => (Request::Resume, OutputFormat::from_simple(&args)),
+            Self::Toggle(args) => (Request::Toggle, OutputFormat::from_simple(&args)),
+            Self::Stop(args) => (Request::Stop, OutputFormat::from_simple(&args)),
+            Self::Status(args) => (Request::Status, OutputFormat::from_status(args)),
+            Self::Listen(args) => (Request::Listen, OutputFormat::from_status(args)),
             Self::StartServer { .. } => return None,
         };
-        Some(request)
+        Some((request, format))
+    }
+}
+
+enum OutputFormat {
+    Json,
+    Silent,
+    Data(Vec<ResponseField>),
+}
+
+impl OutputFormat {
+    const fn from_simple(args: &SimpleCommandArgs) -> Self {
+        if args.json { Self::Json } else { Self::Silent }
+    }
+
+    fn from_status(args: StatusCommandArgs) -> Self {
+        if args.json {
+            Self::Json
+        } else if args.data.is_empty() {
+            Self::Data(vec![
+                ResponseField::IntervalType,
+                ResponseField::State,
+                ResponseField::IsOvertime,
+                ResponseField::Overtime,
+                ResponseField::TimeLeft,
+                ResponseField::TimeElapsed,
+                ResponseField::TotalIntervalDuration,
+            ])
+        } else {
+            Self::Data(args.data)
+        }
+    }
+
+    fn print_line(&self, line: &str) {
+        match self {
+            Self::Json => print!("{line}"),
+            Self::Silent => {
+                if let Ok(resp) =
+                    serde_json::from_str::<pomidoro::ConfirmationResponse>(line)
+                    && !resp.success
+                {
+                    eprintln!("Error: {}", resp.error_msg);
+                }
+            },
+            Self::Data(fields) => {
+                if let Ok(resp) = serde_json::from_str::<pomidoro::StatusResponse>(line) {
+                    let parts: Vec<String> =
+                        fields.iter().map(|f| f.format_value(&resp)).collect();
+                    println!("{}", parts.join(" "));
+                }
+            },
+        }
+    }
+}
+
+#[derive(Debug, Args)]
+struct SimpleCommandArgs {
+    /// Print the underlying JSON message
+    #[arg(short, long)]
+    pub json: bool,
+}
+
+#[derive(Debug, Args)]
+struct StatusCommandArgs {
+    /// Comma seperated fields which values to print in the specified order
+    #[arg(short, long, value_delimiter = ',')]
+    pub data: Vec<ResponseField>,
+
+    /// Print the underlying JSON message
+    #[arg(short, long, conflicts_with = "data")]
+    pub json: bool,
+}
+
+#[derive(Debug, Clone, clap::ValueEnum)]
+#[value(rename_all = "kebab-case")]
+enum ResponseField {
+    #[value(alias = "i", alias = "int", alias = "interval")]
+    IntervalType,
+    #[value(alias = "s")]
+    State,
+    #[value(alias = "io", alias = "is-over")]
+    IsOvertime,
+    #[value(alias = "o")]
+    Overtime,
+    #[value(alias = "tl")]
+    TimeLeft,
+    #[value(alias = "te")]
+    TimeElapsed,
+    #[value(alias = "tid", alias = "tot-int-dur")]
+    TotalIntervalDuration,
+}
+
+impl ResponseField {
+    fn format_value(&self, resp: &pomidoro::StatusResponse) -> String {
+        match self {
+            Self::IntervalType => resp.interval_type.clone(),
+            Self::State => format!("{:?}", resp.state).to_lowercase(),
+            Self::IsOvertime => resp.is_overtime.to_string(),
+            Self::Overtime => resp.overtime.to_string(),
+            Self::TimeLeft => resp.time_left.to_string(),
+            Self::TimeElapsed => resp.time_elapsed.to_string(),
+            Self::TotalIntervalDuration => resp.total_interval_duration.to_string(),
+        }
     }
 }
 
@@ -155,7 +259,7 @@ async fn start_server(config: pomidoro::Config) {
     pomidoro::run_server(listener, config).await;
 }
 
-async fn send_request(config: pomidoro::Config, request: Request) {
+async fn send_request(config: pomidoro::Config, request: Request, format: OutputFormat) {
     let sock_addr = config.socket.as_str();
     let stream = match UnixStream::connect(sock_addr).await {
         Ok(s) => s,
@@ -179,7 +283,9 @@ async fn send_request(config: pomidoro::Config, request: Request) {
         if n == 0 {
             break;
         }
-        print!("{line}");
+
+        format.print_line(&line);
+
         line.clear();
     }
 }
@@ -215,8 +321,8 @@ fn main() {
             enter_tokio_runtime(start_server(config));
         },
         cmd => {
-            let request = cmd.as_request().unwrap();
-            enter_tokio_runtime(send_request(config, request));
+            let (request, format) = cmd.into_request_and_format().unwrap();
+            enter_tokio_runtime(send_request(config, request, format));
         },
     }
 }

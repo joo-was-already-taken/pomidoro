@@ -15,7 +15,7 @@ teardown() {
 
 	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" pause
 	(( status == 0 ))
-	[[ "$output" == *"false"* ]] || [[ "$output" == *"error"* ]]
+	[[ "$output" == *"Timer is not"* ]] || [[ "$output" == *"error"* ]]
 }
 
 @test "resume on stopped timer returns error" {
@@ -23,7 +23,7 @@ teardown() {
 
 	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" resume
 	(( status == 0 ))
-	[[ "$output" == *"false"* ]] || [[ "$output" == *"error"* ]]
+	[[ "$output" == *"Timer is not"* ]] || [[ "$output" == *"error"* ]]
 }
 
 @test "server uses configured socket name" {
@@ -102,7 +102,7 @@ teardown() {
 		retry=$((retry + 1))
 	done
 
-	run "${POMIDORO_BIN}" --config "${NAMED_CONFIG}" status
+	run "${POMIDORO_BIN}" --config "${NAMED_CONFIG}" status --json
 	(( status == 0 ))
 	[[ "$output" == *"deep-work"* ]]
 }
@@ -216,7 +216,7 @@ teardown() {
 
 	sleep 0.1
 
-	run "${POMIDORO_BIN}" --config "${CONFIG_LONG}" status
+	run "${POMIDORO_BIN}" --config "${CONFIG_LONG}" status --json
 	(( status == 0 ))
 	[[ "$(echo "$output" | jq '.total_interval_duration')" == "15" ]]
 }

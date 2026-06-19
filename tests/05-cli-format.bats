@@ -10,12 +10,12 @@ teardown() {
 	common_teardown
 }
 
-@test "status prints space separated values by default" {
+@test "status prints tab separated values by default" {
 	start_server
 
 	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" status
 	(( status == 0 ))
-	[[ "$output" == *"focus stopped false"* ]]
+	[[ "$output" == *"focus"$'\t'"stopped"$'\t'"false"* ]]
 }
 
 @test "status respects --data argument" {
@@ -23,7 +23,7 @@ teardown() {
 
 	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" status --data state,interval
 	(( status == 0 ))
-	[[ "$output" == "stopped focus" ]]
+	[[ "$output" == "stopped"$'\t'"focus" ]]
 }
 
 @test "status --json outputs JSON" {
@@ -31,7 +31,7 @@ teardown() {
 
 	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" status --json
 	(( status == 0 ))
-	
+
 	echo "$output" | jq -e '.state == "Stopped"' >/dev/null
 }
 

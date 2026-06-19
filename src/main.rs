@@ -139,7 +139,7 @@ impl OutputFormat {
                 if let Ok(resp) = serde_json::from_str::<pomidoro::StatusResponse>(line) {
                     let parts: Vec<String> =
                         fields.iter().map(|f| f.format_value(&resp)).collect();
-                    println!("{}", parts.join(" "));
+                    println!("{}", parts.join("\t"));
                 }
             },
         }
@@ -155,7 +155,8 @@ struct SimpleCommandArgs {
 
 #[derive(Debug, Args)]
 struct StatusCommandArgs {
-    /// Comma seperated fields which values to print in the specified order
+    /// Comma seperated fields of response JSON to print.
+    /// The values are printed seperated by tabs.
     #[arg(short, long, value_delimiter = ',')]
     pub data: Vec<ResponseField>,
 

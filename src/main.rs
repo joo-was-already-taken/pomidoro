@@ -3,20 +3,13 @@ use pomidoro::{Request, config};
 use clap::{Args, Parser, Subcommand};
 use thiserror::Error;
 use tokio::io::AsyncBufReadExt;
-use tokio::net::{UnixListener, UnixStream};
+use tokio::net::UnixListener;
 
 use std::future::Future;
 use std::path::PathBuf;
 
 #[derive(Error, Debug)]
 enum StartupError {
-    #[error("Could not read explicitly provided config file {0:?}: {1}")]
-    ExplicitConfigRead(PathBuf, #[source] std::io::Error),
-    #[error("Configuration error in {0:?}: {1}")]
-    Config(PathBuf, #[source] config::Error),
-    #[error("Failed to bind socket {0:?}: {1}")]
-    #[allow(unused)] // TODO: remove
-    SocketBind(PathBuf, #[source] std::io::Error),
     #[error("Failed to bind abstract socket {0:?}: {1}")]
     AbstractSocketBind(String, #[source] std::io::Error),
 }
@@ -198,42 +191,6 @@ impl ResponseField {
     }
 }
 
-fn read_config_file(
-    cli_config: Option<PathBuf>,
-) -> Result<Option<(PathBuf, String)>, StartupError> {
-    if let Some(path) = cli_config {
-        let content = std::fs::read_to_string(&path)
-            .map_err(|e| StartupError::ExplicitConfigRead(path.clone(), e))?;
-        return Ok(Some((path, content)));
-    }
-
-    let config_home = dirs::config_dir();
-
-    let config_file = "pomidoro/config.toml";
-
-    if let Some(mut path) = config_home {
-        path.push(config_file);
-        if let Ok(content) = std::fs::read_to_string(&path) {
-            return Ok(Some((path, content)));
-        }
-        log::debug!(
-            "Could not read '{}', falling back to global config in '/etc'",
-            path.display(),
-        );
-    } else {
-        log::warn!(
-            "Could not determine user configuration directory (neither XDG_CONFIG_HOME nor HOME are set)"
-        );
-    }
-
-    let global_path = PathBuf::from("/etc").join(config_file);
-    if let Ok(content) = std::fs::read_to_string(&global_path) {
-        return Ok(Some((global_path, content)));
-    }
-
-    Ok(None)
-}
-
 fn enter_tokio_runtime<F: Future>(future: F) {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -261,32 +218,22 @@ async fn start_server(config: pomidoro::Config) {
 }
 
 async fn send_request(config: pomidoro::Config, request: Request, format: OutputFormat) {
-    let sock_addr = config.socket.as_str();
-    let stream = match UnixStream::connect(sock_addr).await {
-        Ok(s) => s,
+    let client = pomidoro::Client::new(config);
+
+    let mut reader = match client.send_request(request).await {
+        Ok(r) => r,
         Err(e) => {
-            log::error!("Failed to connect to server at {sock_addr:?}: {e}");
+            log::error!("{e}");
             std::process::exit(1);
         },
     };
 
-    let (reader, mut writer) = tokio::io::split(stream);
-
-    if let Err(e) = pomidoro::send_json(&mut writer, &request).await {
-        log::error!("Failed to send JSON request: {e}");
-        std::process::exit(1);
-    }
-
-    let mut buf_reader = tokio::io::BufReader::new(reader);
     let mut line = String::new();
-
-    while let Ok(n) = buf_reader.read_line(&mut line).await {
+    while let Ok(n) = reader.read_line(&mut line).await {
         if n == 0 {
             break;
         }
-
         format.print_line(&line);
-
         line.clear();
     }
 }
@@ -297,19 +244,7 @@ fn main() {
 
     let cli = Cli::parse();
 
-    let config = match read_config_file(cli.config_path) {
-        Ok(Some((path, content))) => pomidoro::Config::parse(&content)
-            .inspect(|_| {
-                log::info!("Successfully loaded configuration from {}", path.display());
-            })
-            .map_err(|e| StartupError::Config(path, e)),
-        Ok(None) => {
-            log::warn!("No configuration file found, using defaults");
-            Ok(pomidoro::Config::parse("").expect("Default config is always valid"))
-        },
-        Err(e) => Err(e),
-    }
-    .unwrap_or_else(|e| {
+    let config = pomidoro::Config::load(cli.config_path).unwrap_or_else(|e| {
         log::error!("{e}");
         std::process::exit(1);
     });

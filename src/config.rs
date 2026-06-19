@@ -14,6 +14,10 @@ pub enum Error {
     Parse(#[from] toml::de::Error),
     #[error("Configuration validation failed: {0}")]
     Validation(String),
+    #[error("Could not read explicitly provided config file {0:?}: {1}")]
+    ExplicitConfigRead(PathBuf, #[source] std::io::Error),
+    #[error("Configuration error in {0:?}: {1}")]
+    File(PathBuf, Box<Error>),
 }
 
 #[derive(Debug, Deserialize)]
@@ -47,6 +51,47 @@ impl Config {
         config.normalize();
         config.validate().map_err(Error::Validation)?;
         Ok(config)
+    }
+
+    pub fn load(cli_config: Option<PathBuf>) -> Result<Self, Error> {
+        if let Some(path) = cli_config {
+            let content = std::fs::read_to_string(&path)
+                .map_err(|e| Error::ExplicitConfigRead(path.clone(), e))?;
+            log::info!("Successfully loaded configuration from {}", path.display());
+            return Self::parse(&content).map_err(|e| Error::File(path, Box::new(e)));
+        }
+
+        let config_home = dirs::config_dir();
+        let config_file = "pomidoro/config.toml";
+
+        if let Some(mut path) = config_home {
+            path.push(config_file);
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                log::info!("Successfully loaded configuration from {}", path.display());
+                return Self::parse(&content).map_err(|e| Error::File(path, Box::new(e)));
+            }
+            log::debug!(
+                "Could not read '{}', falling back to global config in '/etc'",
+                path.display(),
+            );
+        } else {
+            log::warn!(
+                "Could not determine user configuration directory (neither XDG_CONFIG_HOME nor HOME are set)"
+            );
+        }
+
+        let global_path = PathBuf::from("/etc").join(config_file);
+        if let Ok(content) = std::fs::read_to_string(&global_path) {
+            log::info!(
+                "Successfully loaded configuration from {}",
+                global_path.display()
+            );
+            return Self::parse(&content)
+                .map_err(|e| Error::File(global_path, Box::new(e)));
+        }
+
+        log::warn!("No configuration file found, using defaults");
+        Ok(Self::parse("").expect("Default config is always valid"))
     }
 
     fn normalize(&mut self) {

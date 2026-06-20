@@ -24,7 +24,11 @@
           default = true;
           description = "Whether to build the pomidoro-tray binary.";
         };
-        startService = mkEnableOption "Whether to run Pomidoro tray icon as a service.";
+        startService = mkOption {
+          type = types.bool;
+          default = serviceEnabled;
+          description = "Whether to run Pomidoro tray icon as a service.";
+        };
       };
 
       settings = mkOption {

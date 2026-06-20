@@ -7,11 +7,13 @@
     rustPlatform = pkgs.makeRustPlatform { cargo = toolchain; rustc = toolchain; };
   in rec {
     packages.default = packages.${pkgName};
-    packages.${pkgName} = rustPlatform.buildRustPackage {
+    packages.${pkgName} = pkgs.lib.makeOverridable ({ withTray ? true }: rustPlatform.buildRustPackage {
       name = pkgName;
       version = cargoToml.package.version;
       src = gitignoreSource ./..;
       cargoLock.lockFile = ../Cargo.lock;
+
+      buildFeatures = lib.optionals withTray [ "tray" ];
 
       doCheck = true;
       nativeCheckInputs = with pkgs; [ bats bubblewrap parallel jq ];
@@ -27,7 +29,7 @@
         platforms = platforms.linux;
         mainProgram = pkgName;
       };
-    };
+    }) { };
 
     checks.${pkgName} = packages.${pkgName};
   };

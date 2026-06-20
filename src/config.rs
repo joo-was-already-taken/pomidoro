@@ -20,7 +20,7 @@ pub enum Error {
     File(PathBuf, Box<Error>),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     #[serde(default = "default_cycle")]
     pub cycle: Vec<String>,

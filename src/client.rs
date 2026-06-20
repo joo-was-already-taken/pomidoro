@@ -18,6 +18,7 @@ pub enum Error {
     Parse(#[source] serde_json::Error),
 }
 
+#[derive(Debug, Clone)]
 pub struct Client {
     pub config: Config,
 }

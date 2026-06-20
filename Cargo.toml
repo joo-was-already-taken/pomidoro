@@ -16,6 +16,18 @@ thiserror = "2.0.18"
 humantime-serde = "1.1.1"
 shellexpand = "3.1.2"
 dirs = "6.0.0"
+ksni = { version = "0.3.5", optional = true }
+
+[features]
+default = ["tray"]
+tray = ["dep:ksni"]
+
+[[bin]]
+name = "pomidoro"
+
+[[bin]]
+name = "pomidoro-tray"
+required-features = ["tray"]
 
 [lints.clippy]
 correctness = "warn"

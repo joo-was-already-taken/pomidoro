@@ -12,8 +12,19 @@
 
       package = mkOption {
         type = types.package;
-        default = self.packages.${pkgs.stdenv.hostPlatform.system}.pomidoro;
+        default = self.packages.${pkgs.stdenv.hostPlatform.system}.pomidoro.override { withTray = cfg.tray.enable; };
+        defaultText = lib.literalExpression
+          "inputs.pomidoro.packages.$${pkgs.stdenv.hostPlatform.system}.pomidoro.override { withTray = config.programs.pomidoro.tray.enable; }";
         description = "The pomidoro package to use.";
+      };
+
+      tray = {
+        enable = mkOption {
+          type = types.bool;
+          default = true;
+          description = "Whether to build the pomidoro-tray binary.";
+        };
+        startService = mkEnableOption "Whether to run Pomidoro tray icon as a service.";
       };
 
       settings = mkOption {
@@ -84,7 +95,7 @@
       (lib.mkIf serviceEnabled {
         systemd.user.services.pomidoro = {
           Unit = {
-            Description = "Pomidoro server";
+            Description = "Pomidoro Server";
             Documentation = "https://github.com/joo-was-already-taken/pomidoro";
             After = [ "graphical-session.target" ];
           };
@@ -94,6 +105,24 @@
           };
           Install = {
             WantedBy = [ "default.target" ];
+          };
+        };
+      })
+
+      (lib.mkIf (cfg.tray.enable && cfg.tray.startService) {
+        systemd.user.services.pomidoro-tray = {
+          Unit = {
+            Description = "Pomidoro Tray";
+            Documentation = "https://github.com/joo-was-already-taken/pomidoro";
+            After = [ "graphical-session.target" "pomidoro.service" ];
+            PartOf = [ "graphical-session.target" ];
+          };
+          Service = {
+            ExecStart = "${cfg.package}/bin/pomidoro-tray";
+            Restart = "on-failure";
+          };
+          Install = {
+            WantedBy = [ "graphical-session.target" ];
           };
         };
       })

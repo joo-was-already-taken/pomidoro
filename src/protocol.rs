@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncWriteExt;
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 pub enum Request {
     Start,
     NextInterval,
@@ -31,7 +31,7 @@ pub struct StatusResponse {
     pub total_interval_duration: u64,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 pub enum TimerState {
     Stopped,
     Paused,

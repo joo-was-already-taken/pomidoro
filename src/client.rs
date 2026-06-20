@@ -24,7 +24,8 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn new(config: Config) -> Self {
+    #[must_use]
+    pub const fn new(config: Config) -> Self {
         Self { config }
     }
 

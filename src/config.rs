@@ -17,7 +17,7 @@ pub enum Error {
     #[error("Could not read explicitly provided config file {0:?}: {1}")]
     ExplicitConfigRead(PathBuf, #[source] std::io::Error),
     #[error("Configuration error in {0:?}: {1}")]
-    File(PathBuf, Box<Error>),
+    File(PathBuf, Box<Self>),
 }
 
 #[derive(Debug, Clone, Deserialize)]

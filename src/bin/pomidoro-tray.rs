@@ -37,20 +37,20 @@ impl PomidoroTray {
     fn is_running(&self) -> bool {
         self.status
             .as_ref()
-            .map_or(false, |s| s.state == TimerState::Running)
+            .is_some_and(|s| s.state == TimerState::Running)
     }
 
     fn is_stopped(&self) -> bool {
         self.status
             .as_ref()
-            .map_or(true, |s| s.state == TimerState::Stopped)
+            .is_none_or(|s| s.state == TimerState::Stopped)
     }
 
     fn format_time(&self) -> Option<String> {
         let seconds_fmt = |seconds| {
             let minutes = seconds / 60;
             let seconds_part = seconds % 60;
-            format!("{:02}:{:02}", minutes, seconds_part)
+            format!("{minutes:02}:{seconds_part:02}")
         };
         self.status.as_ref().map(|status| {
             if status.is_overtime {
@@ -72,7 +72,7 @@ impl PomidoroTray {
             (128, 128, 128)
         };
 
-        for line in TOMATO_ART.iter() {
+        for line in &TOMATO_ART {
             for ch in line.chars() {
                 if ch == '#' {
                     data.extend([255, r, g, b]);
@@ -83,8 +83,8 @@ impl PomidoroTray {
         }
 
         vec![ksni::Icon {
-            width: width as i32,
-            height: height as i32,
+            width: i32::try_from(width).unwrap(),
+            height: i32::try_from(height).unwrap(),
             data,
         }]
     }
@@ -96,18 +96,18 @@ impl Tray for PomidoroTray {
     }
 
     fn icon_name(&self) -> String {
-        "".into()
+        String::new()
     }
 
     fn title(&self) -> String {
-        "".into()
+        String::new()
     }
 
     fn tool_tip(&self) -> ksni::ToolTip {
-        let title = self.format_time().unwrap_or(PKG_NAME.into());
+        let title = self.format_time().unwrap_or_else(|| PKG_NAME.into());
         ksni::ToolTip {
             title,
-            description: "".into(),
+            description: String::new(),
             ..Default::default()
         }
     }
@@ -119,12 +119,12 @@ impl Tray for PomidoroTray {
     fn menu(&self) -> Vec<MenuItem<Self>> {
         let mut items = Vec::new();
 
-        let state = match &self.status {
-            Some(status) => {
-                format!("{} - {}", status.interval_type, self.format_time().unwrap(),)
+        let state = self.status.as_ref().map_or_else(
+            || "Connecting...".into(),
+            |status| {
+                format!("{} - {}", status.interval_type, self.format_time().unwrap())
             },
-            None => "Connecting...".into(),
-        };
+        );
 
         items.push(
             StandardItem {
@@ -209,16 +209,16 @@ impl Tray for PomidoroTray {
         );
 
         // Force continuous layout updates while running to bypass DE caching bugs
-        if let Some(status) = &self.status {
-            if status.time_elapsed % 2 == 0 {
-                items.push(
-                    StandardItem {
-                        visible: false,
-                        ..Default::default()
-                    }
-                    .into(),
-                );
-            }
+        if let Some(status) = &self.status
+            && status.time_elapsed % 2 == 0
+        {
+            items.push(
+                StandardItem {
+                    visible: false,
+                    ..Default::default()
+                }
+                .into(),
+            );
         }
 
         items

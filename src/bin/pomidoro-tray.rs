@@ -31,6 +31,7 @@ const TOMATO_ART: [&str; 16] = [
 struct PomidoroTray {
     status: Option<StatusResponse>,
     command_tx: mpsc::UnboundedSender<Request>,
+    hack_parity: bool,
 }
 
 impl PomidoroTray {
@@ -88,41 +89,15 @@ impl PomidoroTray {
             data,
         }]
     }
-}
-
-impl Tray for PomidoroTray {
-    fn id(&self) -> String {
-        PKG_NAME.into()
-    }
-
-    fn icon_name(&self) -> String {
-        String::new()
-    }
-
-    fn title(&self) -> String {
-        String::new()
-    }
-
-    fn tool_tip(&self) -> ksni::ToolTip {
-        let title = self.format_time().unwrap_or_else(|| PKG_NAME.into());
-        ksni::ToolTip {
-            title,
-            description: String::new(),
-            ..Default::default()
-        }
-    }
-
-    fn icon_pixmap(&self) -> Vec<ksni::Icon> {
-        self.render_tomato_icon()
-    }
-
-    fn menu(&self) -> Vec<MenuItem<Self>> {
-        let mut items = Vec::new();
-
+    fn push_state_label(&self, items: &mut Vec<MenuItem<Self>>) {
         let state = self.status.as_ref().map_or_else(
             || "Connecting...".into(),
             |status| {
-                format!("{} - {}", status.interval_type, self.format_time().unwrap())
+                if status.is_overtime {
+                    format!("{} (overtime)", status.interval_type)
+                } else {
+                    status.interval_type.clone()
+                }
             },
         );
 
@@ -134,7 +109,9 @@ impl Tray for PomidoroTray {
             }
             .into(),
         );
+    }
 
+    fn push_playback_controls(&self, items: &mut Vec<MenuItem<Self>>) {
         if self.is_running() {
             items.push(
                 StandardItem {
@@ -147,7 +124,6 @@ impl Tray for PomidoroTray {
                 }
                 .into(),
             );
-            // Add a dummy invisible item to force length change -> layout update on state toggle
             items.push(
                 StandardItem {
                     visible: false,
@@ -173,7 +149,9 @@ impl Tray for PomidoroTray {
                 .into(),
             );
         }
+    }
 
+    fn push_actions(&self, items: &mut Vec<MenuItem<Self>>) {
         items.push(
             StandardItem {
                 label: "Next".into(),
@@ -207,10 +185,54 @@ impl Tray for PomidoroTray {
             }
             .into(),
         );
+    }
+}
 
-        // Force continuous layout updates while running to bypass DE caching bugs
+impl Tray for PomidoroTray {
+    fn id(&self) -> String {
+        PKG_NAME.into()
+    }
+
+    fn icon_name(&self) -> String {
+        String::new()
+    }
+
+    fn title(&self) -> String {
+        String::new()
+    }
+
+    fn tool_tip(&self) -> ksni::ToolTip {
+        let title = self.format_time().unwrap_or_else(|| PKG_NAME.into());
+        ksni::ToolTip {
+            title,
+            description: String::new(),
+            ..Default::default()
+        }
+    }
+
+    fn icon_pixmap(&self) -> Vec<ksni::Icon> {
+        self.render_tomato_icon()
+    }
+
+    fn menu(&self) -> Vec<MenuItem<Self>> {
+        let mut items = Vec::new();
+
+        if self.hack_parity {
+            items.push(
+                StandardItem {
+                    visible: false,
+                    ..Default::default()
+                }
+                .into(),
+            );
+        }
+
+        self.push_state_label(&mut items);
+        self.push_playback_controls(&mut items);
+        self.push_actions(&mut items);
+
         if let Some(status) = &self.status
-            && status.time_elapsed % 2 == 0
+            && status.is_overtime
         {
             items.push(
                 StandardItem {
@@ -241,6 +263,7 @@ async fn main() {
     let tray = PomidoroTray {
         status: None,
         command_tx,
+        hack_parity: false,
     };
 
     let handle = tray.spawn().await.unwrap();
@@ -263,6 +286,16 @@ async fn main() {
                 if let Ok(status) = serde_json::from_str::<StatusResponse>(&line) {
                     handle
                         .update(|tray: &mut PomidoroTray| {
+                            let interval_changed =
+                                tray.status.as_ref().map(|s| &s.interval_type)
+                                    != Some(&status.interval_type);
+                            let overtime_changed =
+                                tray.status.as_ref().map(|s| s.is_overtime)
+                                    != Some(status.is_overtime);
+
+                            if interval_changed || overtime_changed {
+                                tray.hack_parity = !tray.hack_parity;
+                            }
                             tray.status = Some(status);
                         })
                         .await;

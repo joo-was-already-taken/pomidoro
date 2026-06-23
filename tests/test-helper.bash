@@ -23,6 +23,7 @@ common_setup() {
 
 	export CONFIG_FILE="${TEST_DIR}/config.toml"
 	export RUST_LOG=error
+	export SHELL=sh
 
 	cat > "${CONFIG_FILE}" <<EOF
 		cycle = ["focus", "break"]

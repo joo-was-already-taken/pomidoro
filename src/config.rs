@@ -28,6 +28,8 @@ pub struct Config {
     pub intervals: BTreeMap<String, IntervalConfig>,
     #[serde(default)]
     pub socket: Socket,
+    #[serde(default)]
+    pub hooks: Hooks,
 }
 
 fn default_cycle() -> Vec<String> {
@@ -100,18 +102,21 @@ impl Config {
                 "work",
                 IntervalConfig {
                     duration: Duration::from_mins(25),
+                    hooks: Hooks::default(),
                 },
             ),
             (
                 "short break",
                 IntervalConfig {
                     duration: Duration::from_mins(5),
+                    hooks: Hooks::default(),
                 },
             ),
             (
                 "long break",
                 IntervalConfig {
                     duration: Duration::from_mins(15),
+                    hooks: Hooks::default(),
                 },
             ),
         ];
@@ -150,6 +155,8 @@ impl Config {
 pub struct IntervalConfig {
     #[serde(with = "humantime_serde")]
     pub duration: Duration,
+    #[serde(default)]
+    pub hooks: Hooks,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
@@ -232,6 +239,29 @@ fn expand_string(input: &str) -> Result<String, LookupError<env::VarError>> {
         env::var(var).map(Some)
     };
     shellexpand::full_with_context(input, home_dir, vars).map(|cow| cow.to_string())
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Default)]
+pub struct Hooks {
+    pub on_start: Option<Hook>,
+    pub on_completion: Option<Hook>,
+    pub on_resume: Option<Hook>,
+    pub on_pause: Option<Hook>,
+    pub overtime: Option<OvertimeReminder>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(untagged)]
+pub enum Hook {
+    Script(String),
+    Command(Vec<String>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct OvertimeReminder {
+    #[serde(with = "humantime_serde")]
+    pub every: Duration,
+    pub execute: Hook,
 }
 
 #[cfg(test)]
@@ -391,5 +421,125 @@ mod tests {
         assert!(
             matches!(res, Err(Error::Validation(msg)) if msg.contains("cannot contain null bytes"))
         );
+    }
+
+    #[test]
+    fn parse_hooks() {
+        let toml_str = r#"
+            [hooks]
+            on_start = "notify-send 'start'"
+            on_pause = ["echo", "paused"]
+
+            [hooks.overtime]
+            every = "5m"
+            execute = "notify-send 'overtime'"
+        "#;
+        let config = Config::parse(toml_str).unwrap();
+
+        assert_eq!(
+            config.hooks.on_start,
+            Some(Hook::Script("notify-send 'start'".into())),
+        );
+        assert_eq!(
+            config.hooks.on_pause,
+            Some(Hook::Command(vec!["echo".into(), "paused".into(),]))
+        );
+
+        let overtime = config.hooks.overtime.unwrap();
+        assert_eq!(overtime.every, Duration::from_mins(5));
+        assert_eq!(
+            overtime.execute,
+            Hook::Script("notify-send 'overtime'".into()),
+        );
+    }
+
+    #[test]
+    fn parse_interval_hooks() {
+        let toml_str = r#"
+            [intervals.break]
+            duration = "5m"
+
+            [intervals.break.hooks]
+            on_completion = "notify-send 'break done'"
+            on_resume = ["echo", "resumed"]
+
+            [intervals.break.hooks.overtime]
+            every = "1m"
+            execute = "notify-send 'break overtime!'"
+        "#;
+        let config = Config::parse(toml_str).unwrap();
+
+        let break_interval = config.intervals.get("break").unwrap();
+        assert_eq!(break_interval.duration, Duration::from_mins(5));
+
+        let hooks = &break_interval.hooks;
+        assert_eq!(
+            hooks.on_completion,
+            Some(Hook::Script("notify-send 'break done'".to_string()))
+        );
+        assert_eq!(
+            hooks.on_resume,
+            Some(Hook::Command(vec![
+                "echo".to_string(),
+                "resumed".to_string()
+            ]))
+        );
+
+        let overtime = hooks.overtime.as_ref().unwrap();
+        assert_eq!(overtime.every, Duration::from_mins(1));
+        assert_eq!(
+            overtime.execute,
+            Hook::Script("notify-send 'break overtime!'".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_hooks_inline_table() {
+        let toml_str = r#"
+            [hooks]
+            overtime = { every = "5m", execute = ["notify-send", "Time for a break!"] }
+        "#;
+        let config = Config::parse(toml_str).unwrap();
+
+        let overtime = config.hooks.overtime.unwrap();
+        assert_eq!(overtime.every, Duration::from_mins(5));
+        assert_eq!(
+            overtime.execute,
+            Hook::Command(vec![
+                "notify-send".to_string(),
+                "Time for a break!".to_string()
+            ])
+        );
+    }
+
+    #[test]
+    fn parse_hooks_invalid_type() {
+        let toml_str = "
+            [hooks]
+            on_start = 123
+        ";
+        let res = Config::parse(toml_str);
+        assert!(matches!(res, Err(Error::Parse(_))));
+    }
+
+    #[test]
+    fn parse_hooks_invalid_overtime_every() {
+        let toml_str = r#"
+            [hooks.overtime]
+            every = "invalid_duration"
+            execute = "notify-send 'overtime'"
+        "#;
+        let res = Config::parse(toml_str);
+        assert!(matches!(res, Err(Error::Parse(_))));
+    }
+
+    #[test]
+    fn parse_hooks_missing_execute() {
+        let toml_str = r#"
+            [hooks.overtime]
+            every = "5m"
+        "#;
+        let res = Config::parse(toml_str);
+        assert!(matches!(res, Err(Error::Parse(_))));
     }
 }

@@ -1,4 +1,5 @@
 use super::config::Config;
+use super::hooks::{HookContext, HookManager};
 use super::protocol::{ConfirmationResponse, Request, StatusResponse, send_json};
 use super::timer_state::TimerState;
 
@@ -141,6 +142,8 @@ async fn run_timer_actor(
     let mut ticker = tokio::time::interval(Duration::from_secs(1));
     ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
+    let mut hooks = HookManager::new(&state.to_status_response(SystemTime::now()));
+
     loop {
         tokio::select! {
             Some(Command { request, reply }) = cmd_rx.recv() => {
@@ -183,7 +186,9 @@ async fn run_timer_actor(
                     _ => unreachable!(),
                 };
 
-                let _ = state_tx.send(state.to_status_response(now));
+                let status = state.to_status_response(now);
+                hooks.sync_state(&status);
+                let _ = state_tx.send(status.clone());
 
                 let (success, error_msg) = match result {
                     Ok(()) => (true, String::new()),
@@ -195,10 +200,27 @@ async fn run_timer_actor(
                     success,
                     error_msg,
                 };
+
+                if response.success {
+                    HookManager::handle_request(
+                        &HookContext {
+                            config: &state.config,
+                            status: &status,
+                        },
+                        response.request,
+                    );
+                }
+
                 let _ = reply.send(response);
             },
             _ = ticker.tick(), if state.timer.is_running() => {
-                let _ = state_tx.send(state.to_status_response(SystemTime::now()));
+                let now = SystemTime::now();
+                let status = state.to_status_response(now);
+                hooks.handle_tick(&HookContext {
+                    config: &state.config,
+                    status: &status,
+                });
+                let _ = state_tx.send(status);
             },
         }
     }
@@ -287,12 +309,14 @@ mod tests {
             "focus".to_string(),
             IntervalConfig {
                 duration: Duration::from_secs(100),
+                hooks: config::Hooks::default(),
             },
         );
         Config {
             cycle: vec!["focus".to_string()],
             intervals,
             socket: config::Socket::Abstract("\0hello".into()),
+            hooks: config::Hooks::default(),
         }
     }
 
@@ -303,12 +327,14 @@ mod tests {
             "focus".to_string(),
             IntervalConfig {
                 duration: Duration::from_secs(100),
+                hooks: config::Hooks::default(),
             },
         );
         intervals.insert(
             "break".to_string(),
             IntervalConfig {
                 duration: Duration::from_secs(50),
+                hooks: config::Hooks::default(),
             },
         );
         let config = Config {

@@ -212,3 +212,38 @@ teardown() {
 	[ "$line1" = "fast" ]
 	[ "$line2" = "slow" ]
 }
+
+@test "POMIDORO_ environment variables are correctly populated" {
+	local env_file="${TEST_DIR}/env.txt"
+
+	cat > "${CONFIG_FILE}" <<-EOF
+		cycle = ["work"]
+
+		[socket]
+		addr = "$(get_socket_name)"
+		abstract = true
+
+		[intervals.work]
+		duration = "5s"
+
+		[hooks]
+		on_pause = "env > ${env_file}"
+	EOF
+
+	start_server
+	"${POMIDORO_BIN}" --config "${CONFIG_FILE}" start
+	sleep 0.5
+
+	"${POMIDORO_BIN}" --config "${CONFIG_FILE}" toggle
+	sleep 0.5
+
+	[[ -f "${env_file}" ]]
+
+	grep "POMIDORO_INTERVAL_TYPE=work" "${env_file}"
+	grep "POMIDORO_STATE=PAUSED" "${env_file}"
+	grep "POMIDORO_IS_OVERTIME=0" "${env_file}"
+	grep "POMIDORO_OVERTIME=0" "${env_file}"
+	grep -E "POMIDORO_TIME_LEFT=[4-5]" "${env_file}"
+	grep -E "POMIDORO_TIME_ELAPSED=[0-1]" "${env_file}"
+	grep "POMIDORO_TOTAL_INTERVAL_DURATION=5" "${env_file}"
+}

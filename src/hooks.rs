@@ -1,5 +1,5 @@
 use crate::config::{Config, Hook, Hooks};
-use crate::protocol::{Request, StatusResponse, TimerState};
+use crate::protocol::{Request, ServerStatus, TimerState};
 
 use tokio::process::Command;
 
@@ -7,7 +7,7 @@ use std::env;
 
 pub struct HookContext<'a> {
     pub config: &'a Config,
-    pub status: &'a StatusResponse,
+    pub status: &'a ServerStatus,
 }
 
 impl HookContext<'_> {
@@ -38,19 +38,19 @@ pub struct HookManager {
 
 impl HookManager {
     #[must_use]
-    pub const fn new(status: &StatusResponse) -> Self {
+    pub const fn new(status: &ServerStatus) -> Self {
         Self {
             last_was_overtime: status.is_overtime,
             last_overtime_secs: status.overtime,
         }
     }
 
-    pub const fn sync_state(&mut self, status: &StatusResponse) {
+    pub const fn sync_state(&mut self, status: &ServerStatus) {
         self.last_was_overtime = status.is_overtime;
         self.last_overtime_secs = status.overtime;
     }
 
-    fn set_env(cmd: &mut Command, status: &StatusResponse) {
+    fn set_env(cmd: &mut Command, status: &ServerStatus) {
         cmd.env("POMIDORO_INTERVAL_TYPE", &status.interval_type);
         cmd.env(
             "POMIDORO_STATE",
@@ -69,7 +69,7 @@ impl HookManager {
         );
     }
 
-    fn execute(hook: &Hook, status: &StatusResponse) {
+    fn execute(hook: &Hook, status: &ServerStatus) {
         let mut cmd = match hook {
             Hook::Script(script) => {
                 let shell = env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
@@ -162,7 +162,7 @@ mod tests {
 
     #[test]
     fn hook_manager_sync_state() {
-        let mut status = StatusResponse {
+        let mut status = ServerStatus {
             interval_type: "work".to_string(),
             state: TimerState::Running,
             is_overtime: false,
@@ -192,13 +192,14 @@ mod tests {
             
             [intervals.work]
             duration = "25m"
+            productive = true
             [intervals.work.hooks]
             on_start = "work start"
             on_pause = "work pause"
         "#;
         let config = Config::parse(toml_str).unwrap();
 
-        let status = StatusResponse {
+        let status = ServerStatus {
             interval_type: "work".to_string(),
             state: TimerState::Running,
             is_overtime: false,
@@ -219,7 +220,7 @@ mod tests {
         assert_eq!(start_hook, Some(&Hook::Script("work start".to_string())));
 
         // fallback to global hook
-        let status_other = StatusResponse {
+        let status_other = ServerStatus {
             interval_type: "short break".to_string(),
             ..status.clone()
         };

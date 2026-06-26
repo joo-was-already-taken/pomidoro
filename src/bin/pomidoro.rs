@@ -1,4 +1,4 @@
-use pomidoro::{Request, config};
+use pomidoro::{ListenMode, Request, ServerStatus, config};
 
 use clap::{Args, Parser, Subcommand};
 use thiserror::Error;
@@ -64,8 +64,8 @@ enum Command {
     /// Get the current status of the timer
     Status(StatusCommandArgs),
 
-    /// Listen to status updates
-    Listen(StatusCommandArgs),
+    /// Listen to status updates or discrete events
+    Listen(ListenCommandArgs),
 }
 
 impl Command {
@@ -80,8 +80,15 @@ impl Command {
             Self::Resume(args) => (Request::Resume, OutputFormat::from_simple(&args)),
             Self::Toggle(args) => (Request::Toggle, OutputFormat::from_simple(&args)),
             Self::Stop(args) => (Request::Stop, OutputFormat::from_simple(&args)),
-            Self::Status(args) => (Request::Status, OutputFormat::from_status(args)),
-            Self::Listen(args) => (Request::Listen, OutputFormat::from_status(args)),
+            Self::Status(args) => (Request::Status, OutputFormat::from_ticks(args)),
+            Self::Listen(args) => {
+                let (mode, format) = if args.events {
+                    (ListenMode::Events, OutputFormat::Json)
+                } else {
+                    (ListenMode::Tick, OutputFormat::from_ticks(args.status_args))
+                };
+                (Request::Listen(mode), format)
+            },
             Self::StartServer { .. } => return None,
         };
         Some((request, format))
@@ -91,7 +98,7 @@ impl Command {
 enum OutputFormat {
     Json,
     Silent,
-    Data(Vec<ResponseField>),
+    TickData(Vec<ResponseField>),
 }
 
 impl OutputFormat {
@@ -99,43 +106,50 @@ impl OutputFormat {
         if args.json { Self::Json } else { Self::Silent }
     }
 
-    fn from_status(args: StatusCommandArgs) -> Self {
+    fn from_ticks(args: StatusCommandArgs) -> Self {
         if args.json {
             Self::Json
         } else if args.data.is_empty() {
-            Self::Data(vec![
-                ResponseField::IntervalType,
-                ResponseField::State,
-                ResponseField::IsOvertime,
-                ResponseField::Overtime,
-                ResponseField::TimeLeft,
-                ResponseField::TimeElapsed,
-                ResponseField::TotalIntervalDuration,
-            ])
+            Self::TickData(Self::default_fields())
         } else {
-            Self::Data(args.data)
+            Self::TickData(args.data)
         }
     }
 
+    fn default_fields() -> Vec<ResponseField> {
+        vec![
+            ResponseField::IntervalType,
+            ResponseField::State,
+            ResponseField::IsOvertime,
+            ResponseField::Overtime,
+            ResponseField::TimeLeft,
+            ResponseField::TimeElapsed,
+            ResponseField::TotalIntervalDuration,
+        ]
+    }
+
     fn print_line(&self, line: &str) {
+        let unexpected = || eprintln!("Unexpected server response: {line}");
+
         match self {
             Self::Json => print!("{line}"),
             Self::Silent => {
-                if let Ok(resp) =
-                    serde_json::from_str::<pomidoro::ConfirmationResponse>(line)
-                    && !resp.success
-                {
-                    eprintln!("Error: {}", resp.error_msg);
+                match serde_json::from_str::<pomidoro::ConfirmationResponse>(line) {
+                    Ok(resp) if !resp.success => eprintln!("Error: {}", resp.error_msg),
+                    Ok(_) => {},
+                    Err(_) => unexpected(),
                 }
             },
-            Self::Data(fields) => {
-                if let Ok(resp) = serde_json::from_str::<pomidoro::StatusResponse>(line) {
-                    let parts: Vec<String> =
-                        fields.iter().map(|f| f.format_value(&resp)).collect();
-                    println!("{}", parts.join("\t"));
-                }
+            Self::TickData(fields) => match serde_json::from_str::<ServerStatus>(line) {
+                Ok(resp) => Self::print_fields(fields, &resp),
+                Err(_) => unexpected(),
             },
         }
+    }
+
+    fn print_fields(fields: &[ResponseField], resp: &ServerStatus) {
+        let parts: Vec<String> = fields.iter().map(|f| f.format_value(resp)).collect();
+        println!("{}", parts.join("\t"));
     }
 }
 
@@ -158,6 +172,20 @@ struct StatusCommandArgs {
     pub json: bool,
 }
 
+#[derive(Debug, Args)]
+struct ListenCommandArgs {
+    /// Listen for discrete events instead of tick updates
+    #[arg(short, long, conflicts_with = "tick")]
+    pub events: bool,
+
+    /// Listen for tick updates every second and when server state updates (default)
+    #[arg(short, long, conflicts_with = "events")]
+    pub tick: bool,
+
+    #[command(flatten)]
+    pub status_args: StatusCommandArgs,
+}
+
 #[derive(Debug, Clone, clap::ValueEnum)]
 #[value(rename_all = "kebab-case")]
 enum ResponseField {
@@ -178,7 +206,7 @@ enum ResponseField {
 }
 
 impl ResponseField {
-    fn format_value(&self, resp: &pomidoro::StatusResponse) -> String {
+    fn format_value(&self, resp: &pomidoro::ServerStatus) -> String {
         match self {
             Self::IntervalType => resp.interval_type.clone(),
             Self::State => format!("{:?}", resp.state).to_lowercase(),

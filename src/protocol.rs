@@ -2,6 +2,12 @@ use serde::{Deserialize, Serialize};
 use tokio::io::AsyncWriteExt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+pub enum ListenMode {
+    Tick,
+    Events,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 pub enum Request {
     Start,
     NextInterval,
@@ -10,7 +16,7 @@ pub enum Request {
     Toggle,
     Stop,
     Status,
-    Listen,
+    Listen(ListenMode),
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -21,7 +27,7 @@ pub struct ConfirmationResponse {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct StatusResponse {
+pub struct ServerStatus {
     pub interval_type: String,
     pub state: TimerState,
     pub is_overtime: bool,
@@ -36,6 +42,42 @@ pub enum TimerState {
     Stopped,
     Paused,
     Running,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub struct IntervalInfo {
+    pub name: String,
+    pub productive: bool,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(tag = "type", content = "data")]
+pub enum ServerEvent {
+    Start {
+        interval: IntervalInfo,
+        duration: u64,
+    },
+    Pause {
+        interval: IntervalInfo,
+        elapsed: u64,
+    },
+    Resume {
+        interval: IntervalInfo,
+        elapsed: u64,
+    },
+    Stop {
+        interval: IntervalInfo,
+        elapsed: u64,
+    },
+    Next {
+        finished_interval: IntervalInfo,
+        started_interval: IntervalInfo,
+        duration: u64,
+    },
+    IntervalCompleted {
+        interval: IntervalInfo,
+        duration: u64,
+    },
 }
 
 pub async fn send_json<T: Serialize + Sync, W: tokio::io::AsyncWrite + Unpin>(
@@ -73,7 +115,7 @@ mod tests {
 
     #[test]
     fn serialize_status_response() {
-        let status = StatusResponse {
+        let status = ServerStatus {
             interval_type: "focus".to_string(),
             state: TimerState::Paused,
             is_overtime: false,
@@ -95,7 +137,7 @@ mod tests {
 
     #[test]
     fn status_response_roundtrip() {
-        let original = StatusResponse {
+        let original = ServerStatus {
             interval_type: "short break".to_string(),
             state: TimerState::Running,
             is_overtime: true,
@@ -110,7 +152,7 @@ mod tests {
         let expected_json = r#"{"interval_type":"short break","state":"Running","is_overtime":true,"overtime":15,"time_left":0,"time_elapsed":315,"total_interval_duration":300}"#;
         assert_eq!(json, expected_json);
 
-        let deserialized: StatusResponse = serde_json::from_str(&json).unwrap();
+        let deserialized: ServerStatus = serde_json::from_str(&json).unwrap();
 
         assert_eq!(original.interval_type, deserialized.interval_type);
         assert!(matches!(deserialized.state, TimerState::Running));

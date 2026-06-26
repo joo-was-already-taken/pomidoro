@@ -1,4 +1,4 @@
-use pomidoro::{Client, Config, Request, StatusResponse, TimerState};
+use pomidoro::{Client, Config, Request, ServerStatus, TimerState};
 
 use ksni::menu::StandardItem;
 use ksni::{MenuItem, Tray, TrayMethods};
@@ -29,7 +29,7 @@ const TOMATO_ART: [&str; 16] = [
 
 #[derive(Debug)]
 struct PomidoroTray {
-    status: Option<StatusResponse>,
+    status: Option<ServerStatus>,
     command_tx: mpsc::UnboundedSender<Request>,
     hack_parity: bool,
 }
@@ -276,14 +276,17 @@ async fn main() {
     });
 
     loop {
-        if let Ok(mut reader) = client.send_request(Request::Listen).await {
+        if let Ok(mut reader) = client
+            .send_request(Request::Listen(pomidoro::ListenMode::Tick))
+            .await
+        {
             use tokio::io::AsyncBufReadExt;
             let mut line = String::new();
             while let Ok(n) = reader.read_line(&mut line).await {
                 if n == 0 {
                     break;
                 }
-                if let Ok(status) = serde_json::from_str::<StatusResponse>(&line) {
+                if let Ok(status) = serde_json::from_str::<ServerStatus>(&line) {
                     handle
                         .update(|tray: &mut PomidoroTray| {
                             let interval_changed =

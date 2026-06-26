@@ -102,6 +102,7 @@ impl Config {
                 "work",
                 IntervalConfig {
                     duration: Duration::from_mins(25),
+                    is_productive: true,
                     hooks: Hooks::default(),
                 },
             ),
@@ -109,6 +110,7 @@ impl Config {
                 "short break",
                 IntervalConfig {
                     duration: Duration::from_mins(5),
+                    is_productive: false,
                     hooks: Hooks::default(),
                 },
             ),
@@ -116,6 +118,7 @@ impl Config {
                 "long break",
                 IntervalConfig {
                     duration: Duration::from_mins(15),
+                    is_productive: false,
                     hooks: Hooks::default(),
                 },
             ),
@@ -155,6 +158,8 @@ impl Config {
 pub struct IntervalConfig {
     #[serde(with = "humantime_serde")]
     pub duration: Duration,
+    #[serde(rename = "productive")]
+    pub is_productive: bool,
     #[serde(default)]
     pub hooks: Hooks,
 }
@@ -281,6 +286,7 @@ mod tests {
         let toml_str = r#"
             [intervals.work]
             duration = "50m"
+            productive = true
         "#;
         let config = Config::parse(toml_str).unwrap();
 
@@ -315,6 +321,7 @@ mod tests {
             cycle = ["custom"]
             [intervals.custom]
             duration = "1s"
+            productive = true
         "#;
         let config = Config::parse(toml_str).unwrap();
         assert_eq!(config.intervals["custom"].duration, Duration::from_secs(1));
@@ -458,6 +465,7 @@ mod tests {
         let toml_str = r#"
             [intervals.break]
             duration = "5m"
+            productive = false
 
             [intervals.break.hooks]
             on_completion = "notify-send 'break done'"

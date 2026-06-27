@@ -41,7 +41,13 @@ pub struct ServerStatus {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ServerConfigInfo {
     pub cycle: Vec<String>,
-    pub intervals: std::collections::BTreeMap<String, IntervalInfo>,
+    pub intervals: std::collections::BTreeMap<String, ConfigIntervalInfo>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub struct ConfigIntervalInfo {
+    pub productive: bool,
+    pub duration: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
@@ -194,5 +200,72 @@ mod tests {
         assert_eq!(val_err["request"], "Pause");
         assert_eq!(val_err["success"], false);
         assert_eq!(val_err["error_msg"], "Timer is not running");
+    }
+
+    #[test]
+    fn serialize_server_config_info() {
+        let mut intervals = std::collections::BTreeMap::new();
+        intervals.insert(
+            "focus".to_string(),
+            ConfigIntervalInfo {
+                productive: true,
+                duration: 1500,
+            },
+        );
+
+        let config_info = ServerConfigInfo {
+            cycle: vec!["focus".to_string()],
+            intervals,
+        };
+
+        let json = serde_json::to_string(&config_info).unwrap();
+        let expected_json = r#"{"cycle":["focus"],"intervals":{"focus":{"productive":true,"duration":1500}}}"#;
+        assert_eq!(json, expected_json);
+    }
+
+    #[test]
+    fn serialize_server_events() {
+        let interval = IntervalInfo {
+            name: "focus".to_string(),
+            productive: true,
+            duration: 1500,
+        };
+
+        // start event
+        let start_event = ServerEvent::Start {
+            interval: interval.clone(),
+        };
+        let start_json = serde_json::to_string(&start_event).unwrap();
+        assert_eq!(
+            start_json,
+            r#"{"type":"Start","data":{"interval":{"name":"focus","productive":true,"duration":1500}}}"#
+        );
+
+        // pause event
+        let pause_event = ServerEvent::Pause {
+            interval: interval.clone(),
+            elapsed: 600,
+        };
+        let pause_json = serde_json::to_string(&pause_event).unwrap();
+        assert_eq!(
+            pause_json,
+            r#"{"type":"Pause","data":{"interval":{"name":"focus","productive":true,"duration":1500},"elapsed":600}}"#
+        );
+
+        // next event
+        let next_interval = IntervalInfo {
+            name: "short break".to_string(),
+            productive: false,
+            duration: 300,
+        };
+        let next_event = ServerEvent::Next {
+            finished_interval: interval,
+            started_interval: next_interval,
+        };
+        let next_json = serde_json::to_string(&next_event).unwrap();
+        assert_eq!(
+            next_json,
+            r#"{"type":"Next","data":{"finished_interval":{"name":"focus","productive":true,"duration":1500},"started_interval":{"name":"short break","productive":false,"duration":300}}}"#
+        );
     }
 }

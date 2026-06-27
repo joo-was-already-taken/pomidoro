@@ -457,6 +457,27 @@ mod tests {
         }
     }
 
+    fn dummy_config_info() -> protocol::ServerConfigInfo {
+        let config = dummy_config();
+        let mut intervals = BTreeMap::new();
+        for name in config.intervals.keys() {
+            let interval_cfg = config.intervals.get(name);
+            let productive = interval_cfg.is_some_and(|i| i.is_productive);
+            let duration = interval_cfg.map_or(0, |i| i.duration.as_secs());
+            intervals.insert(
+                name.clone(),
+                protocol::ConfigIntervalInfo {
+                    productive,
+                    duration,
+                },
+            );
+        }
+        protocol::ServerConfigInfo {
+            cycle: config.cycle,
+            intervals,
+        }
+    }
+
     #[test]
     fn next_interval() {
         let mut intervals = BTreeMap::new();
@@ -582,24 +603,7 @@ mod tests {
         let (cmd_tx, _cmd_rx) = mpsc::channel(32);
         let (_state_tx, watch_rx) = watch::channel(dummy_status());
         let (event_tx, _event_rx) = tokio::sync::broadcast::channel(16);
-        let config = dummy_config();
-        let mut intervals = std::collections::BTreeMap::new();
-        for name in config.intervals.keys() {
-            let interval_cfg = config.intervals.get(name);
-            let productive = interval_cfg.is_some_and(|i| i.is_productive);
-            let duration = interval_cfg.map_or(0, |i| i.duration.as_secs());
-            intervals.insert(
-                name.clone(),
-                protocol::ConfigIntervalInfo {
-                    productive,
-                    duration,
-                },
-            );
-        }
-        let config_info = protocol::ServerConfigInfo {
-            cycle: config.cycle.clone(),
-            intervals,
-        };
+        let config_info = dummy_config_info();
 
         tokio::spawn(handle_client(
             server_stream,
@@ -693,5 +697,98 @@ mod tests {
         assert_eq!(status.time_left, 100);
         assert_eq!(status.overtime, 0);
         assert!(!status.is_overtime);
+    }
+
+    #[tokio::test]
+    async fn config_retrieving_request() {
+        let (client_stream, server_stream) = UnixStream::pair().unwrap();
+        let (cmd_tx, _cmd_rx) = mpsc::channel(32);
+        let (_state_tx, watch_rx) = watch::channel(dummy_status());
+        let (event_tx, _event_rx) = tokio::sync::broadcast::channel(16);
+        let config_info = dummy_config_info();
+
+        tokio::spawn(handle_client(
+            server_stream,
+            config_info,
+            cmd_tx,
+            watch_rx,
+            event_tx,
+        ));
+
+        let (reader, mut writer) = tokio::io::split(client_stream);
+        writer.write_all(b"\"GetConfig\"\n").await.unwrap();
+
+        let mut buf_reader = BufReader::new(reader);
+        let mut line = String::new();
+        buf_reader.read_line(&mut line).await.unwrap();
+
+        let resp: protocol::ServerConfigInfo = serde_json::from_str(&line).unwrap();
+        assert_eq!(resp.cycle, vec!["focus"]);
+        let focus = resp.intervals.get("focus").unwrap();
+        assert!(focus.productive);
+        assert_eq!(focus.duration, 100);
+    }
+
+    #[tokio::test]
+    async fn server_events_request() {
+        let (client_stream, server_stream) = UnixStream::pair().unwrap();
+        let (cmd_tx, cmd_rx) = mpsc::channel(32);
+
+        let config = dummy_config();
+        let initial_state = ServerState::new(config.clone());
+        let (state_tx, watch_rx) =
+            watch::channel(initial_state.to_server_status(SystemTime::now()));
+        let (event_tx, _event_rx) = tokio::sync::broadcast::channel(16);
+
+        tokio::spawn(run_timer_actor(
+            cmd_rx,
+            state_tx,
+            event_tx.clone(),
+            initial_state,
+        ));
+
+        let config_info = dummy_config_info();
+
+        tokio::spawn(handle_client(
+            server_stream,
+            config_info,
+            cmd_tx.clone(),
+            watch_rx,
+            event_tx.clone(),
+        ));
+
+        let (reader, mut writer) = tokio::io::split(client_stream);
+
+        writer
+            .write_all(b"{\"Listen\":\"Events\"}\n")
+            .await
+            .unwrap();
+
+        // wait for handle_client to process the request and subscribe to events
+        while event_tx.receiver_count() < 2 {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+
+        let (reply_tx, _reply_rx) = oneshot::channel();
+        cmd_tx
+            .send(Command {
+                request: Request::Start,
+                reply: reply_tx,
+            })
+            .await
+            .unwrap();
+
+        let mut buf_reader = BufReader::new(reader);
+        let mut line = String::new();
+        buf_reader.read_line(&mut line).await.unwrap();
+        let event: protocol::ServerEvent = serde_json::from_str(&line).unwrap();
+
+        if let protocol::ServerEvent::Start { interval } = event {
+            assert_eq!(interval.name, "focus");
+            assert!(interval.productive);
+            assert_eq!(interval.duration, 100);
+        } else {
+            panic!("Expected Start event, got {event:?}");
+        }
     }
 }

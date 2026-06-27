@@ -66,6 +66,10 @@ enum Command {
 
     /// Listen to status updates or discrete events
     Listen(ListenCommandArgs),
+
+    /// Get information about the current timer configuration
+    #[command(visible_alias = "config")]
+    ConfigInfo,
 }
 
 impl Command {
@@ -89,6 +93,7 @@ impl Command {
                 };
                 (Request::Listen(mode), format)
             },
+            Self::ConfigInfo => (Request::GetConfig, OutputFormat::Json),
             Self::StartServer { .. } => return None,
         };
         Some((request, format))

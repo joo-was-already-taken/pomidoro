@@ -87,6 +87,24 @@ impl ServerState {
 pub async fn run_server(listener: UnixListener, config: Config) {
     let (cmd_tx, cmd_rx) = mpsc::channel::<Command>(32);
 
+    let mut intervals = std::collections::BTreeMap::new();
+    for name in config.intervals.keys() {
+        let interval_cfg = config.intervals.get(name);
+        let productive = interval_cfg.is_some_and(|i| i.is_productive);
+        let duration = interval_cfg.map_or(0, |i| i.duration.as_secs());
+        intervals.insert(
+            name.clone(),
+            protocol::ConfigIntervalInfo {
+                productive,
+                duration,
+            },
+        );
+    }
+    let config_info = protocol::ServerConfigInfo {
+        cycle: config.cycle.clone(),
+        intervals,
+    };
+
     let initial_state = ServerState::new(config);
     let initial_status = initial_state.to_server_status(SystemTime::now());
 
@@ -137,6 +155,7 @@ pub async fn run_server(listener: UnixListener, config: Config) {
 
         tokio::spawn(handle_client(
             stream,
+            config_info.clone(),
             cmd_tx.clone(),
             state_rx.clone(),
             event_tx.clone(),
@@ -149,10 +168,13 @@ const fn is_authorized(client_uid: u32, server_uid: u32) -> bool {
 }
 
 fn get_interval_info(config: &Config, name: &str) -> protocol::IntervalInfo {
-    let productive = config.intervals.get(name).is_some_and(|i| i.is_productive);
+    let interval_cfg = config.intervals.get(name);
+    let productive = interval_cfg.is_some_and(|i| i.is_productive);
+    let duration = interval_cfg.map_or(0, |i| i.duration.as_secs());
     protocol::IntervalInfo {
         name: name.to_string(),
         productive,
+        duration,
     }
 }
 
@@ -209,7 +231,7 @@ async fn run_timer_actor(
                         state.cur_interval_idx = 0;
                         Ok(())
                     },
-                    _ => unreachable!(),
+                    Request::Status | Request::Listen(_) | Request::GetConfig => unreachable!(),
                 };
 
                 let status = state.to_server_status(now);
@@ -224,13 +246,11 @@ async fn run_timer_actor(
                             Some(protocol::ServerEvent::Next {
                                 finished_interval: old_interval.clone(),
                                 started_interval: new_interval.clone(),
-                                duration: status.total_interval_duration,
                             })
                         },
                         (protocol::TimerState::Stopped, protocol::TimerState::Running) => {
                             Some(protocol::ServerEvent::Start {
                                 interval: new_interval.clone(),
-                                duration: status.total_interval_duration,
                             })
                         },
                         (protocol::TimerState::Paused, protocol::TimerState::Running) => {
@@ -293,7 +313,6 @@ async fn run_timer_actor(
                     let interval = get_interval_info(&state.config, &status.interval_type);
                     let _ = event_tx.send(protocol::ServerEvent::IntervalCompleted {
                         interval,
-                        duration: status.total_interval_duration,
                     });
                 }
 
@@ -309,6 +328,7 @@ async fn run_timer_actor(
 
 async fn handle_client(
     stream: UnixStream,
+    config_info: protocol::ServerConfigInfo,
     cmd_tx: mpsc::Sender<Command>,
     watch_rx: watch::Receiver<ServerStatus>,
     event_tx: tokio::sync::broadcast::Sender<ServerEvent>,
@@ -334,10 +354,19 @@ async fn handle_client(
         },
     };
 
-    route_request(watch_rx, event_tx.subscribe(), cmd_tx, &mut writer, request).await;
+    route_request(
+        config_info,
+        watch_rx,
+        event_tx.subscribe(),
+        cmd_tx,
+        &mut writer,
+        request,
+    )
+    .await;
 }
 
 async fn route_request(
+    config_info: protocol::ServerConfigInfo,
     mut watch_rx: watch::Receiver<ServerStatus>,
     mut event_rx: tokio::sync::broadcast::Receiver<ServerEvent>,
     cmd_tx: mpsc::Sender<Command>,
@@ -345,6 +374,9 @@ async fn route_request(
     request: Request,
 ) {
     match request {
+        Request::GetConfig => {
+            let _ = send_json(writer, &config_info).await;
+        },
         Request::Listen(mode) => match mode {
             protocol::ListenMode::Tick => {
                 let cur_status = watch_rx.borrow().clone();
@@ -550,8 +582,32 @@ mod tests {
         let (cmd_tx, _cmd_rx) = mpsc::channel(32);
         let (_state_tx, watch_rx) = watch::channel(dummy_status());
         let (event_tx, _event_rx) = tokio::sync::broadcast::channel(16);
+        let config = dummy_config();
+        let mut intervals = std::collections::BTreeMap::new();
+        for name in config.intervals.keys() {
+            let interval_cfg = config.intervals.get(name);
+            let productive = interval_cfg.is_some_and(|i| i.is_productive);
+            let duration = interval_cfg.map_or(0, |i| i.duration.as_secs());
+            intervals.insert(
+                name.clone(),
+                protocol::ConfigIntervalInfo {
+                    productive,
+                    duration,
+                },
+            );
+        }
+        let config_info = protocol::ServerConfigInfo {
+            cycle: config.cycle.clone(),
+            intervals,
+        };
 
-        tokio::spawn(handle_client(server_stream, cmd_tx, watch_rx, event_tx));
+        tokio::spawn(handle_client(
+            server_stream,
+            config_info,
+            cmd_tx,
+            watch_rx,
+            event_tx,
+        ));
 
         let (reader, mut writer) = tokio::io::split(client_stream);
 

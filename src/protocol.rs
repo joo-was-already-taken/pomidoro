@@ -16,6 +16,7 @@ pub enum Request {
     Toggle,
     Stop,
     Status,
+    GetConfig,
     Listen(ListenMode),
 }
 
@@ -37,6 +38,12 @@ pub struct ServerStatus {
     pub total_interval_duration: u64,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ServerConfigInfo {
+    pub cycle: Vec<String>,
+    pub intervals: std::collections::BTreeMap<String, IntervalInfo>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 pub enum TimerState {
     Stopped,
@@ -48,6 +55,7 @@ pub enum TimerState {
 pub struct IntervalInfo {
     pub name: String,
     pub productive: bool,
+    pub duration: u64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -55,7 +63,6 @@ pub struct IntervalInfo {
 pub enum ServerEvent {
     Start {
         interval: IntervalInfo,
-        duration: u64,
     },
     Pause {
         interval: IntervalInfo,
@@ -72,11 +79,9 @@ pub enum ServerEvent {
     Next {
         finished_interval: IntervalInfo,
         started_interval: IntervalInfo,
-        duration: u64,
     },
     IntervalCompleted {
         interval: IntervalInfo,
-        duration: u64,
     },
 }
 

@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [ trunk ]
+  pull_request:
+    branches: [ trunk ]
+
+jobs:
+  checks:
+    name: Checks & Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Security Audit
+        run: nix develop --command cargo audit
+
+      - name: Check Formatting
+        run: nix develop --command cargo fmt --all -- --check
+
+      - name: Clippy Checks
+        run: nix develop --command cargo clippy --all-targets -- -D warnings
+
+      - name: Check Compilation
+        run: nix develop --command env RUSTFLAGS="-D warnings" cargo check --all-targets
+
+      - name: Cargo Test
+        run: nix develop --command cargo test

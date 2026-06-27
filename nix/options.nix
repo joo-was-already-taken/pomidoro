@@ -93,6 +93,10 @@ in {
                   description = "Duration of the interval, parsed by humantime.";
                   example = [ "25m" "5s" "10m30s" ];
                 };
+                productive = mkOption {
+                  type = types.bool;
+                  description = "Whether the interval is considered productive / focus time.";
+                };
                 hooks = mkOption {
                   type = types.nullOr hooksType;
                   default = null;

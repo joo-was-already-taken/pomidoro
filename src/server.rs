@@ -192,116 +192,14 @@ async fn run_timer_actor(
     loop {
         tokio::select! {
             Some(Command { request, reply }) = cmd_rx.recv() => {
-                let now = SystemTime::now();
-                let time_to_sec = |timer: &TimerState| timer.time_left_to_whole_second(now);
-
-                let old_status = state.to_server_status(now);
-                let old_interval = get_interval_info(&state.config, &old_status.interval_type);
-
-                let result = match request {
-                    Request::Start => {
-                        state.start(now);
-                        ticker.reset_after(time_to_sec(&state.timer));
-                        Ok(())
-                    },
-                    Request::NextInterval => {
-                        state.next_interval(now);
-                        ticker.reset_after(time_to_sec(&state.timer));
-                        Ok(())
-                    },
-                    Request::Pause => {
-                        state.timer.pause(now).map_err(|e| e.to_string())
-                    },
-                    Request::Resume => {
-                        state.timer.resume(now)
-                            .inspect(|()| ticker.reset_after(time_to_sec(&state.timer)))
-                            .map_err(|e| e.to_string())
-                    },
-                    Request::Toggle => {
-                        state.timer.toggle(now)
-                            .inspect(|()| {
-                                if state.timer.is_running() {
-                                    ticker.reset_after(time_to_sec(&state.timer));
-                                }
-                            })
-                            .map_err(|e| e.to_string())
-                    },
-                    Request::Stop => {
-                        state.timer.stop();
-                        state.cur_interval_idx = 0;
-                        Ok(())
-                    },
-                    Request::Status | Request::Listen(_) | Request::GetConfig => unreachable!(),
-                };
-
-                let status = state.to_server_status(now);
-                let new_interval = get_interval_info(&state.config, &status.interval_type);
-
-                hooks.sync_state(&status);
-                let _ = state_tx.send(status.clone());
-
-                if result.is_ok() {
-                    let event = match (&old_status.state, &status.state) {
-                        (_, _) if old_status.interval_type != status.interval_type => {
-                            Some(protocol::ServerEvent::Next {
-                                finished_interval: old_interval.clone(),
-                                started_interval: new_interval.clone(),
-                            })
-                        },
-                        (protocol::TimerState::Stopped, protocol::TimerState::Running) => {
-                            Some(protocol::ServerEvent::Start {
-                                interval: new_interval.clone(),
-                            })
-                        },
-                        (protocol::TimerState::Paused, protocol::TimerState::Running) => {
-                            Some(protocol::ServerEvent::Resume {
-                                interval: new_interval.clone(),
-                                elapsed: status.time_elapsed,
-                            })
-                        },
-                        (protocol::TimerState::Running, protocol::TimerState::Paused) => {
-                            Some(protocol::ServerEvent::Pause {
-                                interval: new_interval.clone(),
-                                elapsed: status.time_elapsed,
-                            })
-                        },
-                        (_, protocol::TimerState::Stopped)
-                            if !matches!(old_status.state, protocol::TimerState::Stopped) =>
-                        {
-                            Some(protocol::ServerEvent::Stop {
-                                interval: old_interval.clone(),
-                                elapsed: old_status.time_elapsed,
-                            })
-                        },
-                        _ => None,
-                    };
-
-                    if let Some(e) = event {
-                        let _ = event_tx.send(e);
-                    }
-                }
-
-                let (success, error_msg) = match result {
-                    Ok(()) => (true, String::new()),
-                    Err(e) => (false, e),
-                };
-
-                let response = ConfirmationResponse {
+                let response = process_command(
+                    &mut state,
                     request,
-                    success,
-                    error_msg,
-                };
-
-                if response.success {
-                    HookManager::handle_request(
-                        &HookContext {
-                            config: &state.config,
-                            status: &status,
-                        },
-                        response.request,
-                    );
-                }
-
+                    &state_tx,
+                    &event_tx,
+                    &mut hooks,
+                    &mut ticker,
+                );
                 let _ = reply.send(response);
             },
             _ = ticker.tick(), if state.timer.is_running() => {
@@ -311,7 +209,7 @@ async fn run_timer_actor(
 
                 if status.is_overtime && !last_was_overtime {
                     let interval = get_interval_info(&state.config, &status.interval_type);
-                    let _ = event_tx.send(protocol::ServerEvent::IntervalCompleted {
+                    let _ = event_tx.send(ServerEvent::IntervalCompleted {
                         interval,
                     });
                 }
@@ -324,6 +222,125 @@ async fn run_timer_actor(
             },
         }
     }
+}
+
+fn process_command(
+    state: &mut ServerState,
+    request: Request,
+    state_tx: &watch::Sender<ServerStatus>,
+    event_tx: &tokio::sync::broadcast::Sender<ServerEvent>,
+    hooks: &mut HookManager,
+    ticker: &mut tokio::time::Interval,
+) -> ConfirmationResponse {
+    let now = SystemTime::now();
+    let time_to_sec = |timer: &TimerState| timer.time_left_to_whole_second(now);
+
+    let old_status = state.to_server_status(now);
+    let old_interval = get_interval_info(&state.config, &old_status.interval_type);
+
+    let result = match request {
+        Request::Start => {
+            state.start(now);
+            ticker.reset_after(time_to_sec(&state.timer));
+            Ok(())
+        },
+        Request::NextInterval => {
+            state.next_interval(now);
+            ticker.reset_after(time_to_sec(&state.timer));
+            Ok(())
+        },
+        Request::Pause => state.timer.pause(now).map_err(|e| e.to_string()),
+        Request::Resume => state
+            .timer
+            .resume(now)
+            .inspect(|()| ticker.reset_after(time_to_sec(&state.timer)))
+            .map_err(|e| e.to_string()),
+        Request::Toggle => state
+            .timer
+            .toggle(now)
+            .inspect(|()| {
+                if state.timer.is_running() {
+                    ticker.reset_after(time_to_sec(&state.timer));
+                }
+            })
+            .map_err(|e| e.to_string()),
+        Request::Stop => {
+            state.timer.stop();
+            state.cur_interval_idx = 0;
+            Ok(())
+        },
+        Request::Status | Request::Listen(_) | Request::GetConfig => unreachable!(),
+    };
+
+    let status = state.to_server_status(now);
+    let new_interval = get_interval_info(&state.config, &status.interval_type);
+
+    hooks.sync_state(&status);
+    let _ = state_tx.send(status.clone());
+
+    if result.is_ok() {
+        let event = match (&old_status.state, &status.state) {
+            (_, _) if old_status.interval_type != status.interval_type => {
+                Some(ServerEvent::Next {
+                    finished_interval: old_interval,
+                    started_interval: new_interval,
+                })
+            },
+            (protocol::TimerState::Stopped, protocol::TimerState::Running) => {
+                Some(ServerEvent::Start {
+                    interval: new_interval,
+                })
+            },
+            (protocol::TimerState::Paused, protocol::TimerState::Running) => {
+                Some(ServerEvent::Resume {
+                    interval: new_interval,
+                    elapsed: status.time_elapsed,
+                })
+            },
+            (protocol::TimerState::Running, protocol::TimerState::Paused) => {
+                Some(ServerEvent::Pause {
+                    interval: new_interval,
+                    elapsed: status.time_elapsed,
+                })
+            },
+            (_, protocol::TimerState::Stopped)
+                if !matches!(old_status.state, protocol::TimerState::Stopped) =>
+            {
+                Some(ServerEvent::Stop {
+                    interval: old_interval,
+                    elapsed: old_status.time_elapsed,
+                })
+            },
+            _ => None,
+        };
+
+        if let Some(e) = event {
+            let _ = event_tx.send(e);
+        }
+    }
+
+    let (success, error_msg) = match result {
+        Ok(()) => (true, String::new()),
+        Err(e) => (false, e),
+    };
+
+    let response = ConfirmationResponse {
+        request,
+        success,
+        error_msg,
+    };
+
+    if response.success {
+        HookManager::handle_request(
+            &HookContext {
+                config: &state.config,
+                status: &status,
+            },
+            response.request,
+        );
+    }
+
+    response
 }
 
 async fn handle_client(
@@ -781,9 +798,9 @@ mod tests {
         let mut buf_reader = BufReader::new(reader);
         let mut line = String::new();
         buf_reader.read_line(&mut line).await.unwrap();
-        let event: protocol::ServerEvent = serde_json::from_str(&line).unwrap();
+        let event: ServerEvent = serde_json::from_str(&line).unwrap();
 
-        if let protocol::ServerEvent::Start { interval } = event {
+        if let ServerEvent::Start { interval } = event {
             assert_eq!(interval.name, "focus");
             assert!(interval.productive);
             assert_eq!(interval.duration, 100);

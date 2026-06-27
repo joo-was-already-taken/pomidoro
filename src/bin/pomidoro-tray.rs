@@ -151,7 +151,7 @@ impl PomidoroTray {
         }
     }
 
-    fn push_actions(&self, items: &mut Vec<MenuItem<Self>>) {
+    fn push_actions(items: &mut Vec<MenuItem<Self>>) {
         items.push(
             StandardItem {
                 label: "Next".into(),
@@ -229,7 +229,7 @@ impl Tray for PomidoroTray {
 
         self.push_state_label(&mut items);
         self.push_playback_controls(&mut items);
-        self.push_actions(&mut items);
+        Self::push_actions(&mut items);
 
         if let Some(status) = &self.status
             && status.is_overtime

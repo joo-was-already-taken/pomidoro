@@ -34,9 +34,11 @@ common_setup() {
 
 		[intervals.focus]
 		duration = "5s"
+		productive = true
 
 		[intervals.break]
 		duration = "2s"
+		productive = false
 EOF
 }
 
@@ -149,6 +151,7 @@ setup_fake_configs() {
 		cycle = ["etc-work"]
 		[intervals.etc-work]
 		duration = "1s"
+		productive = true
 		[socket]
 		addr = "$(get_socket_name etc)"
 		abstract = true
@@ -158,6 +161,7 @@ setup_fake_configs() {
 		cycle = ["xdg-work"]
 		[intervals.xdg-work]
 		duration = "1s"
+		productive = true
 		[socket]
 		addr = "$(get_socket_name xdg)"
 		abstract = true
@@ -167,6 +171,7 @@ setup_fake_configs() {
 		cycle = ["cli-work"]
 		[intervals.cli-work]
 		duration = "1s"
+		productive = true
 		[socket]
 		addr = "$(get_socket_name cli)"
 		abstract = true

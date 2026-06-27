@@ -53,6 +53,7 @@ teardown() {
 
 		[intervals.test]
 		duration = "3s"
+		productive = true
 	EOF
 
 	"${POMIDORO_BIN}" --config "${EXPLICIT_CONFIG}" start-server &
@@ -84,9 +85,11 @@ teardown() {
 
 		[intervals."deep-work"]
 		duration = "6s"
+		productive = true
 
 		[intervals."coffee-break"]
 		duration = "2s"
+		productive = false
 	EOF
 
 	"${POMIDORO_BIN}" --config "${NAMED_CONFIG}" start-server &
@@ -147,9 +150,11 @@ teardown() {
 
 		[intervals.type-a]
 		duration = "5s"
+		productive = true
 
 		[intervals.type-b]
 		duration = "1s"
+		productive = false
 	EOF
 
 	# Start server
@@ -184,6 +189,7 @@ teardown() {
 
 		[intervals.work]
 		duration = "15s"
+		productive = true
 	EOF
 
 	cat > "${CONFIG_SHORT}" <<-'EOF'
@@ -195,6 +201,7 @@ teardown() {
 
 		[intervals.work]
 		duration = "2s"
+		productive = true
 	EOF
 
 	# Start first server

@@ -22,6 +22,7 @@ teardown() {
 
 		[intervals.work]
 		duration = "1s"
+		productive = true
 
 		[hooks.overtime]
 		every = "1s"
@@ -53,6 +54,7 @@ teardown() {
 
 		[intervals.work]
 		duration = "1s"
+		productive = true
 
 		[hooks]
 		on_completion = "echo 'complete' >> ${hook_file}"
@@ -82,6 +84,7 @@ teardown() {
 
 		[intervals.work]
 		duration = "10s"
+		productive = true
 
 		[hooks]
 		on_pause = "echo 'paused' >> ${pause_file}"
@@ -114,6 +117,7 @@ teardown() {
 
 		[intervals.work]
 		duration = "10s"
+		productive = true
 
 		[intervals.work.hooks]
 		on_pause = "echo 'work paused' >> ${work_file}"
@@ -145,6 +149,7 @@ teardown() {
 
 		[intervals.work]
 		duration = "10s"
+		productive = true
 
 		[hooks]
 		on_pause = "sleep 0.5 && echo 'finished' >> ${hook_file}"
@@ -185,6 +190,7 @@ teardown() {
 
 		[intervals.work]
 		duration = "10s"
+		productive = true
 
 		[hooks]
 		on_pause = "sleep 0.5 && echo 'slow' >> ${hook_file}"
@@ -225,6 +231,7 @@ teardown() {
 
 		[intervals.work]
 		duration = "5s"
+		productive = true
 
 		[hooks]
 		on_pause = "env > ${env_file}"

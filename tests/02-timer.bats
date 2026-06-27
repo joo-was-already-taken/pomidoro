@@ -90,12 +90,15 @@ teardown() {
 
 		[intervals.phase1]
 		duration = "2s"
+		productive = true
 
 		[intervals.phase2]
 		duration = "1s"
+		productive = false
 
 		[intervals.phase3]
 		duration = "2s"
+		productive = false
 	EOF
 
 	"${POMIDORO_BIN}" --config "${THREE_CONFIG}" start-server &
@@ -166,9 +169,11 @@ teardown() {
 
 		[intervals.focus]
 		duration = "1s"
+		productive = true
 
 		[intervals.break]
 		duration = "1s"
+		productive = false
 	EOF
 
 	"${POMIDORO_BIN}" --config "${OVERTIME_CONFIG}" start-server &

@@ -39,6 +39,7 @@
             pkgs.parallel
             pkgs.jq
             pkgs.socat
+            pkgs.cargo-audit
           ];
         };
       };

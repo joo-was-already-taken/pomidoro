@@ -113,7 +113,7 @@ teardown() {
 	[[ "$output" == *"stopped"* ]]
 }
 
-setup_normal_socket_config() {
+setup_path_socket_config() {
 	export SOCKET_FILE="${TEST_DIR}/sockets/nested/pomidoro.sock"
 	cat > "${CONFIG_FILE}" <<-EOF
 		cycle = ["focus", "break"]
@@ -132,8 +132,8 @@ setup_normal_socket_config() {
 	EOF
 }
 
-@test "normal socket: create parent directories and binds" {
-	setup_normal_socket_config
+@test "path socket: creates parent directories and binds" {
+	setup_path_socket_config
 	[[ ! -d "${TEST_DIR}/sockets" ]]
 
 	start_server
@@ -141,8 +141,8 @@ setup_normal_socket_config() {
 	[[ -S "${SOCKET_FILE}" ]]
 }
 
-@test "normal socket: remove stale socket and starts successfully" {
-	setup_normal_socket_config
+@test "path socket: removes stale socket and starts successfully" {
+	setup_path_socket_config
 	mkdir -p "$(dirname "${SOCKET_FILE}")"
 	touch "${SOCKET_FILE}"
 
@@ -154,8 +154,8 @@ setup_normal_socket_config() {
 	[[ -S "${SOCKET_FILE}" ]]
 }
 
-@test "normal socket: fail to start if server is already running" {
-	setup_normal_socket_config
+@test "path socket: fails to start if server is already running" {
+	setup_path_socket_config
 	start_server
 
 	run "${POMIDORO_BIN}" --config "${CONFIG_FILE}" start-server

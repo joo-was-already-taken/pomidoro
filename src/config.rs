@@ -167,7 +167,7 @@ pub struct IntervalConfig {
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(try_from = "SocketHelper")]
 pub enum Socket {
-    Normal(PathBuf),
+    Path(PathBuf),
     Abstract(String),
 }
 
@@ -175,7 +175,7 @@ impl Socket {
     #[must_use]
     pub fn as_str(&self) -> &str {
         match self {
-            Self::Normal(path) => path
+            Self::Path(path) => path
                 .to_str()
                 .expect("Socket path in config should be valid UTF-8"),
             Self::Abstract(addr) => addr.as_str(),
@@ -195,14 +195,14 @@ impl TryFrom<SocketHelper> for Socket {
     fn try_from(helper: SocketHelper) -> Result<Self, Self::Error> {
         let socket = match helper {
             SocketHelper::Simple(addr) => {
-                Self::Normal(PathBuf::from(expand_string(&addr)?))
+                Self::Path(PathBuf::from(expand_string(&addr)?))
             },
             SocketHelper::Full { addr, is_abstract } => {
                 let expanded = expand_string(&addr)?;
                 if is_abstract {
                     Self::Abstract(format!("\0{expanded}"))
                 } else {
-                    Self::Normal(PathBuf::from(expanded))
+                    Self::Path(PathBuf::from(expanded))
                 }
             },
         };
@@ -333,7 +333,7 @@ mod tests {
         let config = Config::parse(toml_str).unwrap();
         assert_eq!(
             config.socket,
-            Socket::Normal(PathBuf::from("/tmp/pomidoro.sock"))
+            Socket::Path(PathBuf::from("/tmp/pomidoro.sock"))
         );
     }
 
@@ -360,7 +360,7 @@ mod tests {
         let config = Config::parse(toml_str).unwrap();
         assert_eq!(
             config.socket,
-            Socket::Normal(PathBuf::from("/tmp/pomidoro.sock"))
+            Socket::Path(PathBuf::from("/tmp/pomidoro.sock"))
         );
     }
 
@@ -390,7 +390,7 @@ mod tests {
             "/run/user/{}/pomidoro.sock",
             rustix::process::getuid().as_raw()
         );
-        assert_eq!(config.socket, Socket::Normal(PathBuf::from(expected_path)));
+        assert_eq!(config.socket, Socket::Path(PathBuf::from(expected_path)));
     }
 
     #[test]
@@ -401,7 +401,7 @@ mod tests {
             "{}/.pomidoro.sock",
             dirs::home_dir().unwrap().to_str().unwrap()
         );
-        assert_eq!(config.socket, Socket::Normal(PathBuf::from(expected_path)));
+        assert_eq!(config.socket, Socket::Path(PathBuf::from(expected_path)));
     }
 
     #[test]

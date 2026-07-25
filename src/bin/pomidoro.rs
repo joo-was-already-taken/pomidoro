@@ -12,8 +12,8 @@ use std::path::{Path, PathBuf};
 enum StartupError {
     #[error("Failed to bind abstract socket {0:?}: {1}")]
     AbstractSocketBind(String, #[source] std::io::Error),
-    #[error("Failed to bind normal socket {0:?}: {1}")]
-    NormalSocketBind(PathBuf, #[source] std::io::Error),
+    #[error("Failed to bind path socket {0:?}: {1}")]
+    PathSocketBind(PathBuf, #[source] std::io::Error),
 }
 
 #[derive(Parser, Debug)]
@@ -261,10 +261,10 @@ async fn start_server(config: pomidoro::Config) {
     }
 
     let listener = match &config.socket {
-        config::Socket::Normal(path) => {
+        config::Socket::Path(path) => {
             validate_socket_path(path).await;
             UnixListener::bind(path)
-                .map_err(|e| StartupError::NormalSocketBind(path.clone(), e))
+                .map_err(|e| StartupError::PathSocketBind(path.clone(), e))
         },
         config::Socket::Abstract(addr) => UnixListener::bind(addr)
             .map_err(|e| StartupError::AbstractSocketBind(addr.clone(), e)),

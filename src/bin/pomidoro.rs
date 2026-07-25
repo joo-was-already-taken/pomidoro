@@ -3,15 +3,17 @@ use pomidoro::{ListenMode, Request, ServerStatus, config};
 use clap::{Args, Parser, Subcommand};
 use thiserror::Error;
 use tokio::io::AsyncBufReadExt;
-use tokio::net::UnixListener;
+use tokio::net::{UnixListener, UnixStream};
 
 use std::future::Future;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Error, Debug)]
 enum StartupError {
     #[error("Failed to bind abstract socket {0:?}: {1}")]
     AbstractSocketBind(String, #[source] std::io::Error),
+    #[error("Failed to bind normal socket {0:?}: {1}")]
+    NormalSocketBind(PathBuf, #[source] std::io::Error),
 }
 
 #[derive(Parser, Debug)]
@@ -234,10 +236,35 @@ fn enter_tokio_runtime<F: Future>(future: F) {
 }
 
 async fn start_server(config: pomidoro::Config) {
-    let listener = match &config.socket {
-        config::Socket::Normal(_path) => {
-            log::error!("Only abstract sockets are currently supported");
+    async fn validate_socket_path(path: &Path) {
+        if path.exists() {
+            if UnixStream::connect(path).await.is_ok() {
+                log::error!(
+                    "Server is already running on this socket: {}",
+                    path.display()
+                );
+                std::process::exit(1);
+            }
+            if let Err(e) = tokio::fs::remove_file(path).await {
+                log::error!("Failed to remove stale socket file {}: {e}", path.display());
+                std::process::exit(1);
+            }
+        } else if let Some(parent) = path.parent()
+            && let Err(e) = tokio::fs::create_dir_all(parent).await
+        {
+            log::error!(
+                "Failed to create parent directories for socket file {:?}: {e}",
+                path.display()
+            );
             std::process::exit(1);
+        }
+    }
+
+    let listener = match &config.socket {
+        config::Socket::Normal(path) => {
+            validate_socket_path(path).await;
+            UnixListener::bind(path)
+                .map_err(|e| StartupError::NormalSocketBind(path.clone(), e))
         },
         config::Socket::Abstract(addr) => UnixListener::bind(addr)
             .map_err(|e| StartupError::AbstractSocketBind(addr.clone(), e)),

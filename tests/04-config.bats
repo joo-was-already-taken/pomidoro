@@ -239,3 +239,46 @@ teardown() {
 @test "explicit --config flag overrides XDG_CONFIG_HOME" {
 	run_precedence_test "cli-work" "${TEST_DIR}/fake_xdg" "${TEST_DIR}/fake_cli/pomidoro/config.toml"
 }
+
+@test "default socket uses XDG_RUNTIME_DIR when set" {
+	cat > "${CONFIG_FILE}" <<-EOF
+		cycle = ["focus", "break"]
+		[intervals.focus]
+		duration = "5s"
+		productive = true
+		[intervals.break]
+		duration = "2s"
+		productive = false
+	EOF
+
+	local fake_xdg_runtime="${TEST_DIR}/fake_runtime"
+	mkdir -p "${fake_xdg_runtime}"
+	export XDG_RUNTIME_DIR="${fake_xdg_runtime}"
+
+	[[ ! -S "${fake_xdg_runtime}/pomidoro/pomidoro.sock" ]]
+
+	start_server
+
+	[[ -S "${fake_xdg_runtime}/pomidoro/pomidoro.sock" ]]
+}
+
+@test "default socket falls back to /tmp when XDG_RUNTIME_DIR is not set" {
+	cat > "${CONFIG_FILE}" <<-EOF
+		cycle = ["focus", "break"]
+		[intervals.focus]
+		duration = "5s"
+		productive = true
+		[intervals.break]
+		duration = "2s"
+		productive = false
+	EOF
+
+	unset XDG_RUNTIME_DIR
+	rm -rf /tmp/pomidoro
+
+	[[ ! -S "/tmp/pomidoro/pomidoro.sock" ]]
+
+	start_server
+
+	[[ -S "/tmp/pomidoro/pomidoro.sock" ]]
+}

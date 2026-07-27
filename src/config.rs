@@ -185,7 +185,10 @@ impl Socket {
 
 impl Default for Socket {
     fn default() -> Self {
-        SocketHelper::default().try_into().unwrap()
+        let runtime_dir = dirs::runtime_dir()
+            .unwrap_or_else(|| PathBuf::from("/tmp"))
+            .join("pomidoro/pomidoro.sock");
+        Self::Path(runtime_dir)
     }
 }
 
@@ -223,15 +226,6 @@ enum SocketHelper {
 
 const fn default_true() -> bool {
     true
-}
-
-impl Default for SocketHelper {
-    fn default() -> Self {
-        Self::Full {
-            addr: "pomidoro-server-${uid}".into(),
-            is_abstract: true,
-        }
-    }
 }
 
 fn expand_string(input: &str) -> Result<String, LookupError<env::VarError>> {

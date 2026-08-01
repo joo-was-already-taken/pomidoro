@@ -6,8 +6,6 @@ A pomodoro timer with client-server architecture and statistic collection runnin
 - **Client-server architecture**: a single server process manages the timer state,
 allowing multiple clients (e.g., terminal, status bar) to interact with it simultaneously.
 - **Customizable**: flexible TOML configuration for intervals and cycles.
-- **Linux-only**: currently it only supports abstract sockets for client-server
-communication, perhaps in the future it will also support other Unix-compatible systems.
 
 ## Run directly using Nix
 ```bash
@@ -27,14 +25,15 @@ Usage: pomidoro [OPTIONS] <COMMAND>
 
 Commands:
   start-server   Start the server
-  start          Start the timer [aliases: s]
+  start          Start the timer [alias: s]
   next-interval  Skip to the next interval in the cycle [aliases: next, n]
-  pause          Pause a running timer [aliases: p]
-  resume         Resume a paused timer [aliases: r]
-  toggle         Toggle between pause and resume [aliases: t]
+  pause          Pause a running timer [alias: p]
+  resume         Resume a paused timer [alias: r]
+  toggle         Toggle between pause and resume [alias: t]
   stop           Stop the timer and reset the cycle
   status         Get the current status of the timer
-  listen         Listen to status updates
+  listen         Listen to status updates or discrete events
+  config-info    Get information about the current timer configuration [alias: config]
   help           Print this message or the help of the given subcommand(s)
 
 Options:

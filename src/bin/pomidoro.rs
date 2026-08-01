@@ -117,14 +117,14 @@ impl OutputFormat {
         if args.json {
             Self::Json
         } else if args.data.is_empty() {
-            Self::TickData(Self::default_fields())
+            Self::TickData(Self::default_fields().to_vec())
         } else {
             Self::TickData(args.data)
         }
     }
 
-    fn default_fields() -> Vec<ResponseField> {
-        vec![
+    const fn default_fields() -> &'static [ResponseField] {
+        &[
             ResponseField::IntervalType,
             ResponseField::State,
             ResponseField::IsOvertime,

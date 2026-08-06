@@ -271,7 +271,7 @@ async fn main() {
             Err(e) => {
                 log::warn!("Failed to spawn tray (is your status bar running?): {e}");
                 tokio::time::sleep(Duration::from_secs(2)).await;
-            }
+            },
         }
     };
 

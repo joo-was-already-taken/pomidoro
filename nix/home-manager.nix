@@ -23,7 +23,6 @@
           Unit = {
             Description = "Pomidoro Server";
             Documentation = "https://github.com/joo-was-already-taken/pomidoro";
-            After = [ "graphical-session.target" ];
           };
           Service = {
             ExecStart = "${cfg.package}/bin/pomidoro start-server";

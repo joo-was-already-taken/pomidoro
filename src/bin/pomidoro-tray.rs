@@ -260,13 +260,20 @@ async fn main() {
     let client = Client::new(config);
     let (command_tx, mut command_rx) = mpsc::unbounded_channel();
 
-    let tray = PomidoroTray {
-        status: None,
-        command_tx,
-        hack_parity: false,
+    let handle = loop {
+        let tray = PomidoroTray {
+            status: None,
+            command_tx: command_tx.clone(),
+            hack_parity: false,
+        };
+        match tray.spawn().await {
+            Ok(handle) => break handle,
+            Err(e) => {
+                log::warn!("Failed to spawn tray (is your status bar running?): {e}");
+                tokio::time::sleep(Duration::from_secs(2)).await;
+            }
+        }
     };
-
-    let handle = tray.spawn().await.unwrap();
 
     let cmd_client = client.clone();
     tokio::spawn(async move {

@@ -40,6 +40,7 @@
             pkgs.jq
             pkgs.socat
             pkgs.cargo-audit
+            pkgs.cargo-edit
           ];
         };
       };

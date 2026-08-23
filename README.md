@@ -1,6 +1,6 @@
 # Pomidoro
 
-A pomodoro timer with client-server architecture and statistic collection running locally.
+A pomodoro timer with client-server architecture running locally.
 
 ## Features
 - **Client-server architecture**: a single server process manages the timer state,
